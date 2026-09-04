@@ -27,6 +27,7 @@ def _build_parser() -> argparse.ArgumentParser:
     convert.add_argument("--max-file-mb", type=int, default=512, help="Reject individual files larger than this size")
     convert.add_argument("--no-incremental", action="store_true", help="Rebuild unchanged files")
     convert.add_argument("--strict", action="store_true", help="Stop on the first conversion error")
+    convert.add_argument("--fail-on-error", action="store_true", help="Exit non-zero if any source failed to convert")
     convert.add_argument("--include-hidden", action="store_true", help="Include hidden path segments")
 
     sub.add_parser("formats", help="List registered format handlers")
@@ -58,6 +59,13 @@ def _cmd_convert(args: argparse.Namespace) -> int:
         f"unsupported={stats.unsupported} failed={stats.failed} chunks={stats.chunks}"
     )
     print(f"Corpus: {args.output.resolve()}")
+    if args.fail_on_error and (stats.failed or stats.unsupported):
+        print(
+            f"error: {stats.failed} failed and {stats.unsupported} unsupported source(s); "
+            f"see {args.output / 'errors.jsonl'}",
+            file=sys.stderr,
+        )
+        return 3
     return 0
 
 

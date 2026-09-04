@@ -17,6 +17,37 @@ class ArchiveLimits:
     max_expanded_bytes: int = 2 * 1024 * 1024 * 1024
 
 
+@dataclass(slots=True)
+class ArchiveBudget:
+    """Run-wide extraction allowance.
+
+    The limits used to be applied per archive, so every nested archive received a
+    fresh allowance and the totals multiplied with depth: a 7 KB nested ZIP expanded
+    into a 115 MB corpus. A single budget threaded through the whole run bounds the
+    real cost instead of the cost of one container.
+    """
+
+    max_files: int
+    max_expanded_bytes: int
+    files_used: int = 0
+    bytes_used: int = 0
+
+    def take_file(self, name: str) -> None:
+        self.files_used += 1
+        if self.files_used > self.max_files:
+            raise ValueError(
+                f"Archive member budget exhausted at {self.max_files} files (while reading {name})"
+            )
+
+    def take_bytes(self, size: int, name: str) -> None:
+        self.bytes_used += size
+        if self.bytes_used > self.max_expanded_bytes:
+            raise ValueError(
+                f"Archive expanded-size budget exhausted at {self.max_expanded_bytes} bytes "
+                f"(while reading {name})"
+            )
+
+
 def is_archive(path: Path) -> bool:
     name = path.name.lower()
     return any(name.endswith(suffix) for suffix in ARCHIVE_SUFFIXES)
@@ -47,10 +78,29 @@ def _safe_target(root: Path, member_name: str) -> Path:
     return target
 
 
-def extract_archive(path: Path, destination: Path, limits: ArchiveLimits) -> list[Path]:
+def _write_member(target: Path, source, name: str) -> None:
+    """Copy one member out, turning host filesystem rejections into the ValueError that
+    callers of this module already expect. A member name that is legal in the archive
+    but illegal on the host (trailing dots on Windows, for instance) used to escape as
+    a bare OSError."""
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("wb") as sink:
+            shutil.copyfileobj(source, sink)
+    except OSError as exc:
+        raise ValueError(f"Archive member cannot be written on this host: {name} ({exc})") from exc
+
+
+def extract_archive(
+    path: Path,
+    destination: Path,
+    limits: ArchiveLimits,
+    budget: ArchiveBudget | None = None,
+) -> list[Path]:
     destination.mkdir(parents=True, exist_ok=True)
+    if budget is None:
+        budget = ArchiveBudget(limits.max_files, limits.max_expanded_bytes)
     files: list[Path] = []
-    total = 0
     if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as archive:
             infos = archive.infolist()
@@ -59,13 +109,11 @@ def extract_archive(path: Path, destination: Path, limits: ArchiveLimits) -> lis
             for info in infos:
                 if info.is_dir():
                     continue
-                total += info.file_size
-                if total > limits.max_expanded_bytes:
-                    raise ValueError("Archive expanded-size limit exceeded")
+                budget.take_file(info.filename)
+                budget.take_bytes(info.file_size, info.filename)
                 target = _safe_target(destination, info.filename)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(info) as source, target.open("wb") as sink:
-                    shutil.copyfileobj(source, sink)
+                with archive.open(info) as source:
+                    _write_member(target, source, info.filename)
                 files.append(target)
         return files
     if tarfile.is_tarfile(path):
@@ -74,16 +122,14 @@ def extract_archive(path: Path, destination: Path, limits: ArchiveLimits) -> lis
             if len(members) > limits.max_files:
                 raise ValueError(f"Archive contains {len(members)} files; limit is {limits.max_files}")
             for member in members:
-                total += member.size
-                if total > limits.max_expanded_bytes:
-                    raise ValueError("Archive expanded-size limit exceeded")
+                budget.take_file(member.name)
+                budget.take_bytes(member.size, member.name)
                 target = _safe_target(destination, member.name)
-                target.parent.mkdir(parents=True, exist_ok=True)
                 source = archive.extractfile(member)
                 if source is None:
                     continue
-                with source, target.open("wb") as sink:
-                    shutil.copyfileobj(source, sink)
+                with source:
+                    _write_member(target, source, member.name)
                 files.append(target)
         return files
     raise ValueError(f"Unsupported archive: {path.name}")

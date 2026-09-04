@@ -1,0 +1,11 @@
+# Without this the sdist carried README.md, pyproject.toml and a partial tests/ tree:
+# every other document and the whole tests/integration suite that VALIDATION.md points
+# at were missing, so the published evidence could not be reproduced from the sdist.
+include LICENSE
+include *.md
+recursive-include docs *.md
+recursive-include tests *.py *.md
+recursive-include audit *.py
+recursive-include .github *.yml
+exclude .editorconfig
+prune audit/fixtures

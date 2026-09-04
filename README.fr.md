@@ -98,6 +98,7 @@ BrainForgeMD repose sur quelques règles explicites :
 - Isolation des erreurs pour les fichiers brisés ou non supportés.
 - Exclusion des dossiers courants de contrôle de version, build, cache et environnements.
 - Liens symboliques ignorés par défaut.
+- Verrouillage du répertoire de sortie : un seul écrivain à la fois.
 - Registre de convertisseurs extensible.
 - Moteurs optionnels Docling et MarkItDown pour les documents et médias riches.
 
@@ -116,6 +117,18 @@ pip install "brainforgemd @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```bash
 pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```
+
+`[all]` couvre PDF, Office, OpenDocument, EPUB, images/OCR, Outlook `.msg` et Parquet.
+
+**L’audio et la vidéo ne sont pas inclus dans `[all]`.** La transcription exige un modèle
+de reconnaissance vocale de plusieurs gigaoctets, fourni par un extra distinct :
+
+```bash
+pip install "brainforgemd[all,asr] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+```
+
+Sans cet extra, chaque fichier `.wav`, `.mp3`, `.mp4` et assimilé est signalé en échec
+plutôt que converti.
 
 ### Environnement de développement
 
@@ -222,7 +235,9 @@ L’extraction d’entités sémantiques, les embeddings, la détection de commu
 
 Le noyau léger traite directement le texte, Markdown, plusieurs fichiers de code/configuration, JSON/JSONL, YAML, TOML, INI, CSV/TSV, XML, HTML, les notebooks Jupyter, les courriels EML, les sous-titres SRT/VTT, SQLite et plusieurs familles d’archives ZIP/TAR.
 
-Les moteurs optionnels étendent la prise en charge vers les PDF, documents Office, OpenDocument, images/OCR, transcription audio/vidéo, EPUB, LaTeX et les autres formats supportés par les versions installées des moteurs.
+Les moteurs optionnels étendent la prise en charge vers les PDF, documents Office, OpenDocument, images/OCR, EPUB, LaTeX et les autres formats supportés par les versions installées des moteurs. La transcription audio/vidéo exige l’extra distinct `[asr]`.
+
+`brainforgemd formats` marque tout convertisseur dont le moteur est absent de la machine courante.
 
 Voir [docs/FORMAT_SUPPORT.fr.md](docs/FORMAT_SUPPORT.fr.md).
 
@@ -252,9 +267,15 @@ Voir [SECURITY.fr.md](SECURITY.fr.md) et [PRIVACY.fr.md](PRIVACY.fr.md).
 | Domaine | Limite actuelle |
 |---|---|
 | Statut de publication | Aucune release GitHub étiquetée et aucun package PyPI pour le moment. |
-| Validation des médias riches | Les moteurs optionnels PDF/Office/OCR/audio/vidéo sont intégrés, mais pas encore exhaustivement benchmarkés sur un vaste corpus réel. |
+| Validation des médias riches | Les moteurs optionnels PDF/Office/OCR sont vérifiés sur des fixtures générées (voir VALIDATION.fr.md), mais pas encore exhaustivement benchmarkés sur un vaste corpus réel. |
 | Graphe sémantique | BrainForgeMD produit uniquement des relations structurelles; il ne fait pas d’inférence d’entités ni de génération de relations sémantiques. |
 | Comptage de jetons | `approx_tokens` est une estimation heuristique, pas le résultat d’un tokenizer propre à un modèle. |
+| Vitesse de l’incrémental | L’incrémental apporte la stabilité et l’auditabilité, pas la vitesse. Une seconde exécution sans changement relit chaque document converti pour reconstruire les chunks et le graphe : elle n’est pas plus rapide que la première. |
+| Mémoire | Le pic mémoire suit la taille totale du corpus, pas celle du plus gros fichier. Prévoir environ 6x la taille des sources. |
+| Taille de sortie | Un corpus pèse environ 2,4x à 3,8x ses sources, car `chunks.jsonl` duplique le texte à côté de `documents/`. |
+| Concurrence | Un seul écrivain par répertoire de sortie. Une seconde exécution simultanée est refusée plutôt que d’altérer la première. |
+| Audio et vidéo | Non couverts par `[all]`; ils exigent l’extra `[asr]`. |
+| OCR PNG et TIFF | Ne fonctionne pas avec les moteurs testés, alors que JPEG, WEBP et BMP fonctionnent. |
 | OCR/transcription | La disponibilité et la qualité dépendent des moteurs optionnels, modèles, bibliothèques natives, du matériel et des sources. |
 | Binaires non supportés | BrainForgeMD les signale au lieu de fabriquer du texte. |
 | Sécurité | Les fichiers hostiles devraient malgré tout être traités dans un environnement isolé, particulièrement avec les parseurs optionnels. |

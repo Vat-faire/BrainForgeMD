@@ -21,6 +21,14 @@ class Converter(ABC):
     def accepts(self, path: Path) -> bool:
         return path.suffix.lower() in self.extensions
 
+    def available(self) -> bool:
+        """Whether this converter can run on this machine right now.
+
+        Converters backed by an optional dependency override this so the CLI can tell
+        a listed extension apart from a usable one.
+        """
+        return True
+
     @abstractmethod
     def convert(self, path: Path) -> ConversionResult:
         raise NotImplementedError

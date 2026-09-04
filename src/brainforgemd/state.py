@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,9 @@ def load_state(output_root: Path) -> dict[str, Any]:
 def save_state(output_root: Path, state: dict[str, Any]) -> None:
     directory = output_root / ".brainforgemd"
     directory.mkdir(parents=True, exist_ok=True)
-    tmp = directory / "state.json.tmp"
+    # Per-process name: two runs sharing one output directory used to collide on
+    # a single temporary file and abort with a rename error.
+    tmp = directory / f"state.json.{os.getpid()}.tmp"
     final = directory / "state.json"
     tmp.write_text(json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     tmp.replace(final)

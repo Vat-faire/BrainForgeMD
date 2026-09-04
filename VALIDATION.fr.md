@@ -46,11 +46,11 @@ Les formats suivants ont été exercés de bout en bout :
 | DOCX | Document Word généré avec titre, paragraphe et tableau | La conversion du document Office réussit |
 | PPTX | Présentation générée avec titre et texte | La conversion de présentation réussit |
 | XLSX | Classeur généré avec cellules structurées | La conversion de feuille de calcul réussit |
-| PNG | Image générée contenant du texte | Le chemin image/OCR produit une sortie Markdown |
+| PNG | Image générée contenant du texte | **Caduc** : l’audit indépendant n’a pas pu le reproduire. L’OCR PNG a renvoyé un Markdown vide; voir plus bas. |
 | EPUB | Conteneur EPUB valide généré avec chapitre XHTML | La conversion EPUB réussit |
 | Parquet | Table Arrow générée | Le convertisseur Parquet natif réussit |
-| WAV | Parole synthétisée localement avec `espeak-ng` | L’entrée audio est acceptée et convertie par la pile riche installée |
-| MP4 | Vidéo générée avec FFmpeg et audio vocal synthétique | L’entrée vidéo/média est acceptée et convertie par la pile riche installée |
+| WAV | Parole synthétisée localement avec `espeak-ng` | **Caduc** : valable uniquement dans un job CI doté d’outils natifs supplémentaires. `brainforgemd[all]` seul ne transcrit pas l’audio; l’extra `[asr]` est requis. |
+| MP4 | Vidéo générée avec FFmpeg et audio vocal synthétique | **Caduc** : identique au WAV — la piste audio exige l’extra `[asr]`. |
 
 Le test des formats riches effectue lui aussi un deuxième passage sans modification et vérifie la stabilité octet pour octet du manifest, des chunks, des nœuds et des arêtes.
 
@@ -67,19 +67,95 @@ La suite tente des traversées de répertoire dans des archives ZIP et TAR avec 
 
 Elle teste également les limites de nombre de fichiers et de taille décompressée. Les tests exigent le rejet de ces entrées et vérifient qu’aucun fichier d’évasion n’est créé hors du dossier d’extraction.
 
-## Ce qui n’est pas encore prouvé
+## Audit indépendant, 4 septembre 2026
 
-La validation actuelle ne prétend **pas** couvrir exhaustivement tous les formats ni toutes les variantes rencontrées dans le monde réel. En particulier :
+Un audit indépendant a re-testé chaque affirmation de cette page contre des fixtures
+générées plutôt que contre la suite existante. Sa méthode, ses constats et ses mesures
+sont dans [INDEPENDENT_AUDIT_REPORT.md](INDEPENDENT_AUDIT_REPORT.md). Les résultats
+ci-dessous remplacent le résumé antérieur lorsque les deux divergent.
 
-- les anciens formats Office binaires comme `.doc`, `.ppt` et `.xls` sont annoncés par les backends optionnels, mais n’ont pas encore de fixtures générées dédiées dans cette suite;
-- les formats OpenDocument (`.odt`, `.ods`, `.odp`) n’ont pas encore de fixtures dédiées;
-- la prise en charge Outlook `.msg` est installée et détectée, mais aucun conteneur MSG synthétique valide n’est encore généré et validé ici;
-- chaque codec d’image, codec audio, conteneur vidéo ou extension annoncée par les backends n’est pas testé individuellement;
-- la précision OCR, la qualité de transcription, la reconstruction des tableaux et la fidélité de mise en page dépendent de la qualité de la source et du backend; une conversion réussie ne garantit pas une reconstruction sémantique parfaite;
-- les documents riches chiffrés, protégés par mot de passe, corrompus, exceptionnellement gros ou adversariaux demandent un corpus de test plus large;
-- les performances sur de très gros corpus ne sont pas encore mesurées ici.
+### Formats prouvés de bout en bout, contenu vérifié
 
-Je préfère garder ces limites explicites plutôt que transformer une liste de capacités de backend en promesses non prouvées.
+Chacun a été généré localement, converti par le pipeline ordinaire, puis contrôlé pour
+une chaîne témoin devant survivre jusqu’au Markdown. « Converti sans lever d’exception »
+n’a pas été accepté comme preuve.
+
+PDF (multipage, Unicode, tableaux, image intégrée, numérisé/OCR, 300 pages), DOCX
+(titres, listes, tableau, image, en-tête/pied de page, Unicode), XLSX (plusieurs
+feuilles, formules, cellules vides, grille 500x10), PPTX (plusieurs diapositives, notes
+du présentateur, tableau, image), ODT, ODS, ODP, `.xls` binaire hérité (un vrai classeur
+BIFF8, via MarkItDown), EPUB, Parquet, Outlook `.msg` (conteneur CFB construit à la
+main), et OCR de JPEG, WEBP et BMP.
+
+### Formats qui ne fonctionnent pas, et pourquoi
+
+| Format | Statut |
+|---|---|
+| Audio (`.wav`, `.mp3`, `.flac`, `.ogg`, `.m4a`) | Échoue avec `brainforgemd[all]`. Exige `brainforgemd[asr]`, qui installe un modèle vocal. |
+| Vidéo (`.mp4`, `.mkv`, `.mov`, `.avi`, `.webm`) | Idem : la piste audio est transcrite, donc le même extra est requis. |
+| OCR PNG et TIFF | Le même texte rendu, correctement reconnu en JPEG, WEBP et BMP, a produit un Markdown vide en PNG et TIFF avec les versions de Docling et MarkItDown testées. Signalé en échec, jamais fabriqué. |
+| `.doc` et `.ppt` hérités | Non vérifiés. Docling les route via LibreOffice, indisponible ici. Non revendiqués. |
+| PDF chiffré | Signalé en échec, ce qui est le comportement attendu. |
+
+L’affirmation antérieure selon laquelle WAV et MP4 étaient « exercés de bout en bout »
+n’était vraie que dans un job CI installant des outils natifs supplémentaires; un simple
+`pip install brainforgemd[all]` ne les a jamais pris en charge. OpenDocument était listé
+mais son lecteur manquait jusqu’à l’ajout d’`odfdo` à l’extra `all`.
+
+### Comportement face aux entrées hostiles et malformées
+
+43 fixtures générées, plus une batterie d’entrées malformées, tronquées, trompeuses et
+adverses, n’ont produit **aucun plantage du pipeline ni aucun contenu fabriqué**. DOCX,
+PNG et PDF corrompus, PDF chiffré, image sans texte, image à faible contraste et PDF
+quasi vide sont tous signalés dans `errors.jsonl` plutôt que convertis.
+
+La traversée d’archive a été re-testée avec 21 formes de charge utile, dont les variantes
+Windows à point ou espace final, les chemins avec lettre de lecteur et UNC, la traversée
+encodée en pourcentage, ainsi que les membres tar de type lien symbolique et lien
+physique. **Aucune charge utile n’est sortie du répertoire d’extraction.**
+
+### Performances mesurées
+
+Windows 11, i9-9900K, Python 3.11, corpus synthétique mixte :
+
+| Fichiers | Sources | À froid | Débit | 2e exécution (inchangée) | Pic RSS | Taille du corpus |
+|---|---|---|---|---|---|---|
+| 100 | 0,16 Mo | 0,74 s | 136 fich./s | 0,76 s | 29 Mo | 0,6 Mo |
+| 1 000 | 1,59 Mo | 5,8 s | 173 fich./s | 6,9 s | 41 Mo | 6,0 Mo |
+| 10 000 | 15,9 Mo | 59 s | 170 fich./s | 72 s | 147 Mo | 59,9 Mo |
+
+Trois propriétés mesurées à prendre en compte :
+
+- **Une seconde exécution sans changement n’est pas plus rapide que la première.** Elle
+  relit depuis le disque chaque document converti pour reconstruire les chunks et le
+  graphe; le profilage attribue environ 70 % de son temps à cette relecture.
+  L’incrémental apporte aujourd’hui la stabilité, pas la vitesse.
+- **Le pic mémoire suit la taille totale du corpus, pas celle du plus gros fichier**, car
+  le Markdown de chaque document et le texte de chaque chunk sont conservés pendant
+  toute l’exécution. Un fichier texte de 100 Mo a culminé à 609 Mo de RSS. Prévoir
+  environ 6x la taille des sources.
+- La sortie pèse environ **2,4x** les sources pour de gros fichiers texte, et jusqu’à
+  **3,8x** pour de nombreux petits fichiers, car `chunks.jsonl` duplique le texte à côté
+  de `documents/`.
+
+La conversion des formats riches est bien plus lente que le noyau : un PDF de 300 pages
+a pris 311 s (environ 1 s/page) et chaque image OCR 3 à 7 s.
+
+## Ce qui n’est toujours pas prouvé
+
+- `.doc` et `.ppt` hérités, qui exigent LibreOffice dans le PATH;
+- la qualité de la transcription audio et vidéo, seulement sa disponibilité avec `[asr]`;
+- la précision de l’OCR en général, et l’OCR PNG/TIFF ne fonctionne pas du tout;
+- chaque codec d’image, codec audio, conteneur vidéo et extension listée par un moteur;
+- les documents riches protégés par mot de passe et adverses au-delà des cas ci-dessus;
+- le comportement sur des corpus de plus de 10 000 fichiers ou des fichiers de plus de
+  100 Mo;
+- macOS et Linux pour les constats de l’audit précisément : l’audit s’est déroulé sous
+  Windows 11, tandis que la matrice CI continue de couvrir les trois plateformes pour la
+  suite du noyau.
+
+Je préfère que ces limites restent explicites plutôt que de transformer des listes de
+capacités de moteurs en promesses non tenues.
 
 ## Reproduire les preuves
 

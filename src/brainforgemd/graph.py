@@ -4,13 +4,23 @@ import re
 from itertools import pairwise
 from pathlib import PurePosixPath
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from .models import Chunk
 from .utils import stable_id
 
 _MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 _URL_RE = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
+
+
+def _safe_urlparse(value: str):
+    """urlparse raises ValueError on things like an unterminated IPv6 literal
+    (``http://[nothost/page``). One such link in one document used to abort the
+    entire corpus build, so parse failures are treated as 'not a URL'."""
+    try:
+        return urlparse(value)
+    except ValueError:
+        return None
 
 
 def build_graph(
@@ -71,7 +81,10 @@ def build_graph(
         markdown = doc.get("markdown", "")
         explicit_links = [m.group(1).strip().strip("<>") for m in _MD_LINK_RE.finditer(markdown)]
         urls = set(_URL_RE.findall(markdown))
-        urls.update(link for link in explicit_links if urlparse(link).scheme in {"http", "https"})
+        for link in explicit_links:
+            parsed = _safe_urlparse(link)
+            if parsed is not None and parsed.scheme in {"http", "https"}:
+                urls.add(link)
         for url in sorted(urls):
             url_id = url_nodes.setdefault(url, stable_id("url", url))
             edges.append(
@@ -85,10 +98,10 @@ def build_graph(
 
         base = PurePosixPath(doc["source_path"]).parent
         for link in explicit_links:
-            parsed = urlparse(link)
-            if parsed.scheme or link.startswith("#"):
+            parsed = _safe_urlparse(link)
+            if parsed is None or parsed.scheme or link.startswith("#"):
                 continue
-            candidate = str((base / parsed.path).as_posix())
+            candidate = str((base / unquote(parsed.path)).as_posix())
             # normalize simple ./ and ../ path components
             parts: list[str] = []
             for part in PurePosixPath(candidate).parts:

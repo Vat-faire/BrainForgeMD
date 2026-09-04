@@ -2,9 +2,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..archive import ARCHIVE_SUFFIXES
 from ..models import ConversionResult
 from ..utils import clean_text, decode_text, fenced
 from .base import Converter
+from .rich import RICH_EXTENSIONS
+
+# Formats that have a dedicated binary backend. When that backend is missing the right
+# answer is a reported failure, not a text dump: a small uncompressed PDF is mostly
+# printable ASCII, so this converter used to "succeed" on it and write PDF object syntax
+# into the corpus as if it were the document's prose, with failed=0 and parser
+# "generic-text". That is the fabricated extraction the project sets out to avoid.
+BINARY_EXTENSIONS = (
+    RICH_EXTENSIONS
+    | frozenset(ARCHIVE_SUFFIXES)
+    | frozenset({".sqlite", ".sqlite3", ".db", ".parquet", ".pq", ".gz", ".bz2", ".xz"})
+)
 
 
 class GenericTextConverter(Converter):
@@ -14,6 +27,11 @@ class GenericTextConverter(Converter):
     extensions = frozenset()
 
     def accepts(self, path: Path) -> bool:
+        name = path.name.lower()
+        if path.suffix.lower() in BINARY_EXTENSIONS or any(
+            name.endswith(suffix) for suffix in ARCHIVE_SUFFIXES
+        ):
+            return False
         try:
             sample = path.read_bytes()[:65536]
         except OSError:

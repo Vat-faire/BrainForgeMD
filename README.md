@@ -98,6 +98,7 @@ BrainForgeMD is built around a few explicit rules:
 - Failure isolation for damaged or unsupported files.
 - Common VCS/build/cache/environment directory exclusions.
 - Symlink skipping by default.
+- Single-writer locking of the output directory.
 - Extensible converter registry.
 - Optional Docling and MarkItDown rich-document/media backends.
 
@@ -116,6 +117,18 @@ pip install "brainforgemd @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```bash
 pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```
+
+`[all]` covers PDF, Office, OpenDocument, EPUB, images/OCR, Outlook `.msg` and Parquet.
+
+**Audio and video are not in `[all]`.** Transcription needs a speech model, which adds
+several gigabytes, so it is a separate extra:
+
+```bash
+pip install "brainforgemd[all,asr] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+```
+
+Without it every `.wav`, `.mp3`, `.mp4` and similar file is reported as a failure rather
+than converted.
 
 ### Development setup
 
@@ -222,7 +235,9 @@ Semantic entity extraction, embeddings, community detection, inferred relations,
 
 The dependency-light core directly handles text, Markdown, common source/config files, JSON/JSONL, YAML, TOML, INI, CSV/TSV, XML, HTML, Jupyter notebooks, EML email, SRT/VTT subtitles, SQLite, and common ZIP/TAR archive families.
 
-Optional backends extend support toward PDF, Office documents, OpenDocument, images/OCR, audio/video transcription, EPUB, LaTeX, and other formats supported by the installed backend versions.
+Optional backends extend support toward PDF, Office documents, OpenDocument, images/OCR, EPUB, LaTeX, and other formats supported by the installed backend versions. Audio and video transcription needs the separate `[asr]` extra.
+
+`brainforgemd formats` marks any converter whose backend is missing on the current machine.
 
 See [docs/FORMAT_SUPPORT.md](docs/FORMAT_SUPPORT.md).
 
@@ -255,6 +270,12 @@ See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
 | Rich media validation | Optional PDF/Office/OCR/audio/video backends are integrated but not yet exhaustively benchmarked on a broad real-world corpus. |
 | Semantic graph | BrainForgeMD emits structural relationships only; it does not perform entity inference or semantic relation generation. |
 | Token counts | `approx_tokens` is a heuristic, not a model-specific tokenizer result. |
+| Incremental speed | Incremental conversion buys stability and auditability, not speed. A second unchanged run re-reads every converted document to rebuild the chunks and graph, so it is not faster than the first. |
+| Memory | Peak memory scales with total corpus size, not with the largest file. Budget roughly 6x the source size. |
+| Output size | A corpus is roughly 2.4x-3.8x the size of its sources, because `chunks.jsonl` duplicates the text alongside `documents/`. |
+| Concurrency | One writer per output directory. A second concurrent run is refused rather than allowed to corrupt the first. |
+| Audio and video | Not covered by `[all]`; they need the `[asr]` extra. |
+| PNG and TIFF OCR | Does not currently work with the tested backends, while JPEG, WEBP and BMP do. |
 | OCR/transcription | Availability and quality depend on optional backends, models, native libraries, hardware, and the source material. |
 | Unsupported binaries | BrainForgeMD reports them rather than fabricating text. |
 | Security | Hostile files should still be processed in an isolated environment, especially through optional parsers. |

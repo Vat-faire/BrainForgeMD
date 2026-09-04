@@ -1,21 +1,31 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from . import __version__
-from .archive import ArchiveLimits, extract_archive, is_archive
+from .archive import ArchiveBudget, ArchiveLimits, extract_archive, is_archive
 from .chunking import ChunkSettings, chunk_markdown
 from .frontmatter import render_front_matter
 from .graph import build_graph
+from .lock import CorpusLock
 from .models import Chunk, ErrorRecord, PipelineStats, SourceInfo
 from .registry import ConverterRegistry, build_default_registry
 from .state import load_state, save_state
-from .utils import guess_mime, jsonl_write, safe_output_path, sha256_file, stable_id
+from .utils import (
+    atomic_write_text,
+    guess_mime,
+    jsonl_write,
+    safe_output_path,
+    sha256_file,
+    stable_id,
+)
 
 
 @dataclass(slots=True)
@@ -65,6 +75,15 @@ class Pipeline:
             raise FileNotFoundError(str(input_path))
         if input_path == output_root:
             raise ValueError("Output directory cannot be the same as the input directory")
+        # An output directory that contains the source excludes every source through the
+        # "never re-ingest the corpus" filter, so `convert ./docs -o .` used to report
+        # discovered=0, write an empty corpus and exit 0.
+        if output_root in input_path.parents:
+            raise ValueError(
+                f"Output directory {output_root} contains the source directory {input_path}; "
+                "every source would be excluded as part of the corpus. Choose an output "
+                "directory outside the source tree, or a subdirectory of it."
+            )
         files: list[Path] = []
         for path in input_path.rglob("*"):
             if path.is_symlink():
@@ -99,10 +118,78 @@ class Pipeline:
             mime_type=guess_mime(path),
         )
 
+    @staticmethod
+    def _claim_output_path(output_root: Path, relative_path: str, claimed: dict[str, str]) -> Path:
+        """Give this source an output path no other source in the run owns.
+
+        ``a.txt`` maps to ``a.txt.md`` while ``a.md`` keeps its name, which is a
+        two-to-one mapping for the pair ``X`` / ``X.md`` — ``README`` and ``README.md``
+        both wanted ``documents/README.md``, so one source was silently overwritten and
+        its manifest row described the other one's text. The loser now gets a filename
+        derived from its own source path, and since discovery is sorted the winner is
+        always the lexicographically smaller path, independent of what else is present.
+        """
+        logical = relative_path.replace("!", "__archive__")
+        candidate = safe_output_path(output_root, logical)
+        key = candidate.relative_to(output_root).as_posix()
+        owner = claimed.get(key)
+        if owner is None or owner == relative_path:
+            claimed[key] = relative_path
+            return candidate
+        candidate = safe_output_path(output_root, logical, disambiguate=True)
+        key = candidate.relative_to(output_root).as_posix()
+        claimed[key] = relative_path
+        return candidate
+
+    @staticmethod
+    def _prune_orphan_documents(output_root: Path, keep: set[str]) -> int:
+        """Delete Markdown left behind by sources that no longer exist.
+
+        The README tells consumers to treat ``documents/**/*.md`` as the corpus, so
+        stale files for deleted or renamed sources were served as live content.
+        """
+        documents_root = (output_root / "documents").resolve()
+        if not documents_root.is_dir():
+            return 0
+        removed = 0
+        for path in sorted(documents_root.rglob("*"), reverse=True):
+            if path.is_dir():
+                try:
+                    next(path.iterdir())
+                except StopIteration:
+                    with contextlib.suppress(OSError):
+                        path.rmdir()
+                except OSError:
+                    pass
+                continue
+            relative = path.relative_to(output_root).as_posix()
+            if relative in keep:
+                continue
+            with contextlib.suppress(OSError):
+                path.unlink()
+                removed += 1
+        return removed
+
     def run(self, input_path: Path, output_root: Path, settings: PipelineSettings) -> PipelineStats:
         output_root = output_root.resolve()
+        full_scan = Path(input_path).resolve().is_dir()
         source_root, discovered = self._discover(input_path, settings.include_hidden, output_root)
         output_root.mkdir(parents=True, exist_ok=True)
+        # Nothing in the output contract survives two writers, and each run prunes what
+        # it considers the other's orphans, so a concurrent run is refused up front.
+        with CorpusLock(output_root):
+            return self._run_locked(
+                source_root, discovered, output_root, settings, full_scan
+            )
+
+    def _run_locked(
+        self,
+        source_root: Path,
+        discovered: list[Path],
+        output_root: Path,
+        settings: PipelineSettings,
+        full_scan: bool,
+    ) -> PipelineStats:
         stats = PipelineStats(discovered=len(discovered))
         errors: list[ErrorRecord] = []
         documents: list[dict[str, Any]] = []
@@ -114,13 +201,25 @@ class Pipeline:
         max_bytes = settings.max_file_mb * 1024 * 1024
         chunk_settings = ChunkSettings(settings.chunk_chars, settings.overlap_chars, settings.min_chunk_chars)
         archive_limits = ArchiveLimits(settings.archive_depth, settings.archive_max_files, settings.archive_max_expanded_mb * 1024 * 1024)
+        archive_budget = ArchiveBudget(archive_limits.max_files, archive_limits.max_expanded_bytes)
+        # output_path -> source relative_path, so a second source that maps to a name
+        # another source already owns is given a distinct, path-derived filename.
+        claimed: dict[str, str] = {}
 
         queue: list[tuple[Path, str, int]] = [(path, path.relative_to(source_root).as_posix(), 0) for path in discovered]
         archive_tempdirs: list[tempfile.TemporaryDirectory[str]] = []
         try:
             while queue:
                 path, logical_relative, depth = queue.pop(0)
-                if path.stat().st_size > max_bytes:
+                try:
+                    size_bytes = path.stat().st_size
+                except OSError as exc:
+                    stats.failed += 1
+                    errors.append(ErrorRecord(logical_relative, "discover", type(exc).__name__, str(exc)))
+                    if settings.strict:
+                        raise
+                    continue
+                if size_bytes > max_bytes:
                     stats.failed += 1
                     errors.append(ErrorRecord(logical_relative, "limits", "FileTooLarge", f"File exceeds {settings.max_file_mb} MiB limit"))
                     if settings.strict:
@@ -137,7 +236,7 @@ class Pipeline:
                     tempdir = tempfile.TemporaryDirectory(prefix="brainforgemd-")
                     archive_tempdirs.append(tempdir)
                     try:
-                        extracted = extract_archive(path, Path(tempdir.name), archive_limits)
+                        extracted = extract_archive(path, Path(tempdir.name), archive_limits, archive_budget)
                         prefix = logical_relative + "!"
                         for child in sorted(extracted, key=lambda p: p.as_posix().lower()):
                             child_rel = child.relative_to(Path(tempdir.name)).as_posix()
@@ -149,24 +248,42 @@ class Pipeline:
                             raise
                     continue
 
-                source = self._source_info(path, source_root, logical_relative)
-                output_path = safe_output_path(output_root, source.relative_path.replace("!", "__archive__"))
+                try:
+                    source = self._source_info(path, source_root, logical_relative)
+                    output_path = self._claim_output_path(output_root, source.relative_path, claimed)
+                except (OSError, ValueError) as exc:
+                    stats.failed += 1
+                    errors.append(ErrorRecord(logical_relative, "output", type(exc).__name__, str(exc)))
+                    if settings.strict:
+                        raise
+                    continue
+
                 previous = previous_files.get(source.relative_path, {})
                 if (
                     settings.incremental
                     and previous.get("sha256") == source.sha256
                     and previous.get("config_hash") == config_hash
+                    and previous.get("output_path") == output_path.relative_to(output_root).as_posix()
                     and output_path.exists()
                 ):
                     # Re-read existing Markdown so indexes/graph/chunks can still be rebuilt consistently.
-                    full_md = output_path.read_text(encoding="utf-8")
+                    try:
+                        full_md = output_path.read_text(encoding="utf-8")
+                    except OSError as exc:
+                        stats.failed += 1
+                        errors.append(ErrorRecord(source.relative_path, "cache", type(exc).__name__, str(exc), source.sha256))
+                        if settings.strict:
+                            raise
+                        continue
                     body = full_md.split("---\n\n", 1)[-1] if full_md.startswith("---\n") else full_md
                     title = previous.get("title", path.stem)
                     parser = previous.get("parser", "cached")
                     stats.skipped += 1
                 else:
                     try:
+                        stamp_before = path.stat()
                         result = self.registry.convert(path)
+                        stamp_after = path.stat()
                     except Exception as exc:
                         message = str(exc)
                         unsupported = message.startswith("No converter registered")
@@ -175,6 +292,28 @@ class Pipeline:
                         errors.append(ErrorRecord(source.relative_path, "convert", type(exc).__name__, message, source.sha256))
                         if settings.strict:
                             raise
+                        continue
+                    if (stamp_before.st_mtime_ns, stamp_before.st_size) != (
+                        stamp_after.st_mtime_ns,
+                        stamp_after.st_size,
+                    ):
+                        # The whole point of the ledger is that sha256 describes the bytes
+                        # the stored Markdown came from. If the source was rewritten while
+                        # it was being read, that guarantee no longer holds, so report the
+                        # file instead of publishing a hash for text it never contained.
+                        stats.failed += 1
+                        errors.append(
+                            ErrorRecord(
+                                source.relative_path,
+                                "convert",
+                                "SourceChangedDuringRead",
+                                "Source was modified while it was being converted; "
+                                "its recorded hash would not describe the extracted text",
+                                source.sha256,
+                            )
+                        )
+                        if settings.strict:
+                            raise RuntimeError(errors[-1].message)
                         continue
                     title = result.title or path.stem
                     parser = result.parser
@@ -194,10 +333,20 @@ class Pipeline:
                     }
                     body = result.markdown.rstrip() + "\n"
                     full_md = render_front_matter(fields) + body
-                    output_path.parent.mkdir(parents=True, exist_ok=True)
-                    tmp = output_path.with_suffix(output_path.suffix + ".tmp")
-                    tmp.write_text(full_md, encoding="utf-8", newline="\n")
-                    tmp.replace(output_path)
+                    # Writing one document can fail on its own (a Windows path over
+                    # MAX_PATH, a permission problem, a full disk). That must isolate the
+                    # document, not abandon the corpus and its incremental state.
+                    try:
+                        output_path.parent.mkdir(parents=True, exist_ok=True)
+                        tmp = output_path.with_suffix(output_path.suffix + ".tmp")
+                        tmp.write_text(full_md, encoding="utf-8", newline="\n")
+                        tmp.replace(output_path)
+                    except OSError as exc:
+                        stats.failed += 1
+                        errors.append(ErrorRecord(source.relative_path, "write", type(exc).__name__, str(exc), source.sha256))
+                        if settings.strict:
+                            raise
+                        continue
                     stats.converted += 1
 
                 chunks = chunk_markdown(body, source.source_id, source.relative_path, chunk_settings)
@@ -228,6 +377,11 @@ class Pipeline:
             for tempdir in archive_tempdirs:
                 tempdir.cleanup()
 
+        if full_scan:
+            # Only a whole-tree scan knows the complete set of live documents; a
+            # single-file run must never delete the rest of an existing corpus.
+            self._prune_orphan_documents(output_root, {doc["output_path"] for doc in documents})
+
         documents.sort(key=lambda d: d["source_path"].lower())
         all_chunks.sort(key=lambda c: (c.source_path.lower(), c.ordinal))
         manifest = [{k: v for k, v in doc.items() if k != "markdown"} for doc in documents]
@@ -246,10 +400,13 @@ class Pipeline:
     def _write_index(output_root: Path, documents: list[dict[str, Any]]) -> None:
         lines = ["# BrainForgeMD corpus index", "", f"Documents: {len(documents)}", ""]
         for doc in documents:
-            target = doc["output_path"]
-            label = doc["source_path"].replace("[", "\\[").replace("]", "\\]")
+            # An unescaped destination breaks the link: a ")" in the filename closes it
+            # early and a "#" turns the rest into a fragment, so documents/paren(1).txt.md
+            # resolved to "documents/paren(1".
+            target = quote(doc["output_path"], safe="/")
+            label = doc["source_path"].replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
             lines.append(f"- [{label}]({target}) — `{doc['parser']}` — {doc['chunk_count']} chunks")
-        (output_root / "INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+        atomic_write_text(output_root / "INDEX.md", "\n".join(lines) + "\n")
 
     @staticmethod
     def _write_report(output_root: Path, stats: PipelineStats, errors: list[ErrorRecord]) -> None:
@@ -269,4 +426,4 @@ class Pipeline:
                 lines.append(f"- `{error.source_path}` — **{error.error_type}**: {error.message}")
         else:
             lines.append("No conversion errors.")
-        (output_root / "REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+        atomic_write_text(output_root / "REPORT.md", "\n".join(lines) + "\n")

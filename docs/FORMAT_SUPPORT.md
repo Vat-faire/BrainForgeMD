@@ -30,7 +30,15 @@ Install the Docling extra with:
 pip install "brainforgemd[docling] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```
 
-Depending on the installed Docling version and environment, this can extend support to families such as PDF, Word, PowerPoint, Excel, OpenDocument, images/OCR, HTML/Markdown, XML document dialects, audio/video transcription paths, VTT, LaTeX, email, EPUB, and other formats supported by that Docling release.
+Depending on the installed Docling version and environment, this can extend support to families such as PDF, Word, PowerPoint, Excel, OpenDocument, images/OCR, HTML/Markdown, XML document dialects, VTT, LaTeX, email, EPUB, and other formats supported by that Docling release.
+
+Two capabilities Docling advertises need extras that `[docling]` alone does not install:
+
+- **OpenDocument** needs `odfdo`, which is included in `brainforgemd[all]` and
+  `brainforgemd[odf]`. Without it `.odt`, `.ods` and `.odp` fail.
+- **Audio and video transcription** needs a speech model, installed by
+  `brainforgemd[asr]`. It is deliberately excluded from `[all]` because it adds several
+  gigabytes. Without it every audio and video file is reported as a failure.
 
 ## Optional MarkItDown fallback
 
@@ -57,11 +65,27 @@ brainforgemd formats
 brainforgemd doctor
 ```
 
+`brainforgemd formats` prefixes a converter with `!` when its backend is not installed
+on the current machine, so a listed extension can be told apart from a usable one.
+
 ## Current validation level
 
 The deterministic core is covered by the project's automated test suite and cross-platform CI matrix.
 
-Optional PDF, Office, OCR, image, audio, and video paths are integrated, but the current pre-release project has **not yet been exhaustively benchmarked or validated on a broad real-world fixture corpus**. Support exposed by an installed optional backend should therefore not be confused with a guarantee of identical extraction quality for every file.
+An independent audit converted generated fixtures for PDF (multi-page, Unicode, tables,
+images, scanned/OCR, 300-page), DOCX, XLSX, PPTX, ODT, ODS, ODP, legacy `.xls`, EPUB,
+Parquet, Outlook `.msg`, and JPEG/WEBP/BMP OCR, and verified that expected content
+survived into the Markdown. See [VALIDATION.md](../VALIDATION.md).
+
+Known gaps in the tested backend versions:
+
+- **PNG and TIFF OCR return empty Markdown**, while the same rendered text OCRs
+  correctly as JPEG, WEBP and BMP. These are reported as failures, not fabricated.
+- **Legacy `.doc` and `.ppt`** route through LibreOffice, which must be on PATH.
+- Audio and video need the `[asr]` extra as described above.
+
+Support exposed by an installed optional backend should not be confused with a
+guarantee of identical extraction quality for every file.
 
 ## Files that do not meaningfully convert to Markdown
 

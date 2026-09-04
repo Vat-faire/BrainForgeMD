@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 from ..models import ConversionResult
@@ -16,6 +17,9 @@ RICH_EXTENSIONS = frozenset({
 class DoclingConverter(Converter):
     name = "docling"
     extensions = RICH_EXTENSIONS
+
+    def available(self) -> bool:
+        return importlib.util.find_spec("docling") is not None
 
     def convert(self, path: Path) -> ConversionResult:
         try:
@@ -35,6 +39,9 @@ class DoclingConverter(Converter):
 class MarkItDownConverter(Converter):
     name = "markitdown"
     extensions = RICH_EXTENSIONS | frozenset({".zip"})
+
+    def available(self) -> bool:
+        return importlib.util.find_spec("markitdown") is not None
 
     def convert(self, path: Path) -> ConversionResult:
         try:

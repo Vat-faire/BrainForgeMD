@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..models import ConversionResult
 from .base import Converter
+from .text import strip_non_content_elements
 
 
 class EmlConverter(Converter):
@@ -48,7 +49,7 @@ class EmlConverter(Converter):
         body = "\n\n".join(text_parts).strip()
         if not body and html_parts:
             raw = "\n".join(html_parts)
-            raw = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", "", raw)
+            raw = strip_non_content_elements(raw)
             raw = re.sub(r"(?is)<br\s*/?>", "\n", raw)
             raw = re.sub(r"(?is)</p>", "\n\n", raw)
             body = html.unescape(re.sub(r"(?is)<[^>]+>", "", raw)).strip()

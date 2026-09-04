@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import venv
 from pathlib import Path
@@ -71,7 +70,8 @@ def main() -> int:
         markdown = (output / record["output_path"]).read_text(encoding="utf-8")
         if "BrainForgeMD clean wheel smoke test" not in markdown:
             raise SystemExit("Converted Markdown did not preserve fixture content")
-        if json.loads((output / ".brainforgemd" / "state.json").read_text(encoding="utf-8"))["version"] != 1:
+        state = json.loads((output / ".brainforgemd" / "state.json").read_text(encoding="utf-8"))
+        if state["version"] != 1:
             raise SystemExit("Incremental state file is invalid")
 
     print(f"Clean-wheel smoke test passed with {wheel.name}")

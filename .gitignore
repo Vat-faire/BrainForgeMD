@@ -15,3 +15,6 @@ htmlcov/
 Thumbs.db
 *.log
 context-out/
+# audit venv, not part of the project
+.venv-audit/
+audit/fixtures/

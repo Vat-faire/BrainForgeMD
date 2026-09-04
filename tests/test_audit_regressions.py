@@ -584,7 +584,7 @@ def test_control_characters_in_a_title_keep_front_matter_valid_yaml(tmp_path: Pa
     yaml = pytest.importorskip("yaml")
     from brainforgemd.frontmatter import render_front_matter
 
-    for bad in ["\x7f", "\x85", "\x9f", " ", " ", "﻿"]:
+    for bad in [chr(0x7F), chr(0x85), chr(0x9F), chr(0x2028), chr(0x2029), chr(0xFEFF)]:
         rendered = render_front_matter({"title": f"before{bad}after"})
         parsed = yaml.safe_load(rendered[len("---\n") : -len("---\n\n")])
         assert parsed["title"] == f"before{bad}after"

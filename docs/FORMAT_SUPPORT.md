@@ -1,30 +1,72 @@
-# Format support
+# Format Support
 
-Format support has two layers.
+*Read this in [French / en français](FORMAT_SUPPORT.fr.md).*
 
-## Core, dependency-light converters
+BrainForgeMD has two format-support layers: a lightweight deterministic core and optional rich-document/media backends.
 
-| Family | Extensions | Notes |
+## Core converters
+
+The core aims to stay small and predictable. It directly handles formats where useful Markdown can be produced without a heavy external parser.
+
+| Family | Extensions / examples | Behavior |
 |---|---|---|
-| Plain text | txt, md, markdown, rst, log | Encoding detection and normalization |
-| Source/config | py, js, ts, java, c/cpp, cs, go, rs, rb, php, swift, kt, sh, ps1, sql, Dockerfile-style and many config extensions | Wrapped in fenced code blocks with language hints |
-| Structured | json, jsonl, yaml/yml, toml, ini/cfg/conf, xml | Pretty/safe textual representation |
-| Tables | csv, tsv | Markdown table with width/row limits |
-| Web | html, htm | Text/structure extraction without executing scripts |
-| Notebook | ipynb | Markdown and code cells; outputs are preserved as text, never executed |
-| Email | eml | Headers plus text/html body and attachment inventory |
-| Subtitles | srt, vtt | Timestamped transcript |
-| SQLite | sqlite, sqlite3, db | Read-only schema and bounded table rows |
-| Archives | zip, tar, tgz, tar.gz, tar.bz2, tar.xz | Safe recursive extraction |
+| Plain text | txt, md, markdown, rst, log | Decoded and normalized text |
+| Source/config | py, js, ts, java, c/cpp, cs, go, rs, rb, php, swift, kt, sh, ps1, sql, Dockerfile-style and common config files | Source text in fenced code blocks with language hints |
+| Structured data | json, jsonl, yaml/yml, toml, ini/cfg/conf, xml | Readable structured representation |
+| Tables | csv, tsv | Bounded Markdown tables |
+| Web | html, htm | Text and visible structure without executing scripts |
+| Notebooks | ipynb | Markdown cells, code cells, and textual outputs; cells are never executed |
+| Email | eml | Headers, body content, and attachment inventory |
+| Subtitles | srt, vtt | Timestamped transcript content |
+| SQLite | sqlite, sqlite3, db | Read-only schema and bounded row samples |
+| Parquet | parquet | Structured tabular content when the optional dependency is available |
+| Archives | zip, tar, tgz, tar.gz, tar.bz2, tar.xz | Safe bounded recursive extraction |
 
-## Optional rich backends
+## Optional Docling backend
 
-`pip install "brainforgemd[docling]"` enables the formats supported by the installed Docling release. Current Docling releases include families such as PDF, Word, PowerPoint, Excel, OpenDocument, images/OCR, HTML/Markdown, multiple XML document dialects, audio/video, VTT, LaTeX, email, EPUB and other specialized formats.
+Install the Docling extra with:
 
-`pip install "brainforgemd[markitdown]"` enables MarkItDown as a fallback backend for formats it recognizes, including common Office files, PDF, images/OCR, audio transcription, HTML, structured text, ZIP and EPUB.
+```bash
+pip install "brainforgemd[docling] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+```
 
-Because backend capabilities evolve, `brainforgemd formats` and `brainforgemd doctor` are the authority for the installed machine.
+Depending on the installed Docling version and environment, this can extend support to families such as PDF, Word, PowerPoint, Excel, OpenDocument, images/OCR, HTML/Markdown, XML document dialects, audio/video transcription paths, VTT, LaTeX, email, EPUB, and other formats supported by that Docling release.
 
-## Binary formats that cannot become meaningful text
+## Optional MarkItDown fallback
 
-Some files are inherently binary or application-specific. BrainForgeMD does not fabricate a transcription. Unsupported inputs are reported in `errors.jsonl` with their path, MIME guess, hash and reason so a plugin can be added later without losing provenance.
+Install MarkItDown as an additional fallback with:
+
+```bash
+pip install "brainforgemd[markitdown] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+```
+
+Its capabilities depend on the installed release and optional dependencies. It can provide additional conversion paths for common Office documents, PDF, images/OCR, audio, HTML, structured text, ZIP, EPUB, and related formats.
+
+## Full optional stack
+
+```bash
+pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+```
+
+Because optional backend capabilities evolve independently from BrainForgeMD, the project does not claim that every backend version supports exactly the same formats.
+
+The practical authority on a target machine is:
+
+```bash
+brainforgemd formats
+brainforgemd doctor
+```
+
+## Current validation level
+
+The deterministic core is covered by the project's automated test suite and cross-platform CI matrix.
+
+Optional PDF, Office, OCR, image, audio, and video paths are integrated, but the current pre-release project has **not yet been exhaustively benchmarked or validated on a broad real-world fixture corpus**. Support exposed by an installed optional backend should therefore not be confused with a guarantee of identical extraction quality for every file.
+
+## Files that do not meaningfully convert to Markdown
+
+Not every binary or application-specific format has a meaningful textual representation. BrainForgeMD does not fabricate one merely to claim support.
+
+When no converter can produce useful content, the source is reported instead of silently discarded. The error record preserves enough information to identify the file and add a specialized converter later.
+
+**Unsupported is preferable to invented content.**

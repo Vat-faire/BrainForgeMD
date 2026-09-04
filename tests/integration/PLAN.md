@@ -1,1 +1,0 @@
-Validation targets: core corpus conversion, clean-wheel install, archive traversal refusal, incremental idempotence, rich PDF/DOCX/PPTX/XLSX/image/audio/video conversion when optional backends are available, and cross-platform execution through GitHub Actions.

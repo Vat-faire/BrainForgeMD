@@ -22,7 +22,7 @@ survive into the Markdown — "the converter did not raise" was never accepted a
 | Python | 3.11.9 (CPython, 64-bit) |
 | Long paths | `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 0` (MAX_PATH enforced) |
 | Starting commit | `29f27d5` (`test: add reproducible deep validation suite`) |
-| Final commit | `63d9f5d` |
+| Final commit | `70afb71` |
 | Branch | `audit/independent-validation` |
 
 ### Dependency versions used
@@ -49,25 +49,25 @@ Each blocked test is named in §3 and §9 rather than silently omitted.
 
 | Activity | Result |
 |---|---|
-| Full pytest suite (final) | **98 passed, 1 skipped, 0 failed** |
+| Full pytest suite (final) | **101 passed, 1 skipped, 0 failed** |
 | Ruff | Clean across `src/`, `tests/`, `audit/` |
-| Coverage of `src/brainforgemd` | **85%** (1357 statements, 203 missed) |
+| Coverage of `src/brainforgemd` | **85%** (1368 statements, 204 missed) |
 | Wheel + sdist build | Succeeds; wheel is code-only, 29 entries |
 | Clean-venv wheel install | Core installs with **zero third-party dependencies**, as documented |
 | Project's own `smoke_wheel.py` | Passes |
 | CLI (`--help`, `version`, `formats`, `doctor`, `convert` file, `convert` dir) | All pass from a neutral CWD in a clean venv |
 | Generated format fixtures | 44 built; 43 through the batch harness, the `.msg` verified separately |
-| Hostile / malformed input battery | ~60 cases |
+| Hostile / malformed input battery | ~70 cases |
 | Archive traversal payloads | 21 shapes, ZIP + TAR |
 | Property-based tests (Hypothesis) | 13 properties, ~2000 generated cases |
 | Benchmarks | 100 / 1 000 / 10 000 files, plus 5 / 25 / 100 MB single files |
 | Corpus integrity checker | Independent re-validation of the published output contract |
 
-**Test counts by file (99 collected):**
+**Test counts by file (102 collected):**
 
 | File | Tests |
 |---|---|
-| `tests/test_audit_regressions.py` (new) | 56 |
+| `tests/test_audit_regressions.py` (new) | 59 |
 | `tests/test_audit_properties.py` (new) | 13 |
 | `tests/integration/test_core_deep.py` | 9 |
 | `tests/test_converters.py` | 6 |
@@ -79,7 +79,7 @@ Each blocked test is named in §3 and §9 rather than silently omitted.
 The single skip is `test_rich_formats.py`, which gates itself on `espeak` being present.
 
 The pre-existing suite (29 tests) passed against the unmodified code. **It did not detect
-any of the 22 defects below.** All 22 were found by testing the project against its own
+any of the 24 defects below.** All 24 were found by testing the project against its own
 public claims instead.
 
 ---
@@ -138,12 +138,12 @@ image, low-contrast image, empty ZIP, 1-byte ZIP, truncated ZIP, unsupported bin
 
 ## 4. Defects found
 
-**22 HIGH/MEDIUM defects**, plus 5 LOW and 5 INFO items.
+**24 HIGH/MEDIUM defects**, plus 5 LOW and 5 INFO items.
 
-- **19 HIGH/MEDIUM fixed in code**, each with a regression test that fails on `29f27d5`
+- **21 HIGH/MEDIUM fixed in code**, each with a regression test that fails on `29f27d5`
   and passes afterwards.
-- **2 reported and deliberately left open** (H-8, M-13) — see §4.4.
-- **1 (M-14) is an upstream backend defect** that BrainForgeMD already handles correctly
+- **2 reported and deliberately left open** (H-8, M-15) — see §4.4.
+- **1 (M-16) is an upstream backend defect** that BrainForgeMD already handles correctly
   by reporting the failure; only the documentation was corrected.
 - Of the LOW items, 4 were fixed and 1 (L-5) left open. The INFO items are recorded, not
   fixed.
@@ -276,9 +276,22 @@ The ledger's central promise is that `sha256` describes the bytes the stored Mar
 came from. A source rewritten between hashing and conversion broke that silently.
 Detected via size and mtime and reported as `SourceChangedDuringRead`.
 
-**M-13 — Memory scales with total corpus size** *(reported, not fixed — see §4.4)*
+**M-13 — An output directory above the source silently produced an empty corpus** *(fixed, `70afb71`)*
+Only `input == output` was guarded. If the output directory *contained* the source —
+`convert ./docs -o .`, a plausible mistake — every file was excluded by the "never
+re-ingest the corpus" filter, and the run reported `discovered=0, converted=0`, wrote an
+empty corpus and **exited 0**. The user got a success message and nothing else.
 
-**M-14 — PNG and TIFF OCR do not work** *(documented)*
+**M-14 — Case-clashing archive members silently mis-attributed content** *(fixed, `70afb71`)*
+Archive member names are case-sensitive; Windows and macOS filesystems are not. A ZIP
+written on Linux holding both `Report.txt` and `report.txt` extracted into a single file.
+One member's content was discarded, and `manifest.jsonl` then listed **both** source paths
+with the same hash and the same surviving text. Members resolving to the same file on the
+host are now reported rather than silently merged.
+
+**M-15 — Memory scales with total corpus size** *(reported, not fixed — see §4.4)*
+
+**M-16 — PNG and TIFF OCR do not work** *(documented)*
 Backend defect in the tested Docling/MarkItDown/RapidOCR versions, not in BrainForgeMD.
 The failure is reported correctly and nothing is fabricated. `VALIDATION.md` previously
 listed PNG OCR as proven; that row is now marked superseded.
@@ -317,7 +330,7 @@ there is none.
 file needs neither a re-read nor a re-chunk; or short-circuit the whole run when the
 discovered file set and config hash exactly match the stored state.
 
-**M-13 — Peak memory scales with total corpus size, not with the largest file.**
+**M-15 — Peak memory scales with total corpus size, not with the largest file.**
 `documents` retains every document's full Markdown and `all_chunks` retains every chunk's
 text for the entire run. Measured peak RSS: 29 MB at 100 files, 41 MB at 1 000, **147 MB
 at 10 000** (15.9 MB of source), and **609 MB for a single 100 MB text file** — roughly 6x
@@ -352,6 +365,7 @@ externally if ordering must be preserved.
 | MEDIUM | **Nested-archive amplification ×15 892** — per-archive budgets multiplied with depth; a 7 KB input produced a 115 MB corpus. Now a single run-wide budget. |
 | MEDIUM | **Script/CSS injection into the corpus** (H-1) — arguably the highest-impact security-adjacent finding, since it silently places attacker-controlled JavaScript into text destined for an LLM context window. |
 | MEDIUM | **Corpus corruption from concurrent writers** (H-6) — including deletion of another run's documents. |
+| MEDIUM | **Case-clashing archive members** silently merged into one file on Windows and macOS, mis-attributing content to a source path that never held it. Now reported. |
 | LOW | Archive members with host-illegal names escaped as untyped `OSError`. |
 
 ### Residual risks
@@ -383,7 +397,7 @@ CSV, HTML, YAML). Reproduce with `python audit/benchmark.py <work-dir>`.
 | 10 000 | 15.87 MB | 58.98 s | 170 | 34.06 s | 72.38 s | **0.81x** | 147 MB | 59.9 MB | 12 857 |
 
 Throughput is flat from 100 to 10 000 files — the pipeline scales linearly with no
-degradation. Both listed defects (H-8, M-13) are visible in the speedup and RSS columns.
+degradation. Both listed defects (H-8, M-15) are visible in the speedup and RSS columns.
 
 ### Single large files
 
@@ -478,7 +492,7 @@ No claim was strengthened. Everything added is backed by a reproducible artifact
 - **The `.msg` fixture is minimal.** Subject, sender and body were verified; recipient
   parsing needs richer MAPI recipient storages than the hand-built container provides.
 - **Ceiling of 10 000 files / 100 MB.** Larger corpora were not benchmarked; the memory
-  finding (M-13) implies the practical limit is memory-bound.
+  finding (M-15) implies the practical limit is memory-bound.
 - **Concurrency was tested with 3 processes**, not under sustained load.
 - Fuzzing used Hypothesis with bounded example counts, not a long-running campaign.
 
@@ -495,7 +509,7 @@ No claim was strengthened. Everything added is backed by a reproducible artifact
 
 2. Address **H-8**. Incremental conversion being slower than a full run undercuts a
    headline feature; §4.4 gives two concrete approaches.
-3. Address **M-13**, or document the memory ceiling in the README's limits table more
+3. Address **M-15**, or document the memory ceiling in the README's limits table more
    prominently than it is now.
 4. Run this audit's suite on Ubuntu and macOS and on Python 3.12/3.13 before tagging. The
    new tests are platform-neutral and should be added to the CI matrix.
@@ -525,7 +539,7 @@ symlinks are genuinely skipped; the graph emits only factual relations and inven
 nothing; chunk text is always literally present in its own document. Determinism is real
 — two independent runs over the same sources produce byte-identical output, and a
 metadata-only change is correctly ignored. The core installs with zero third-party
-dependencies exactly as advertised. Nothing in the corpus is ever fabricated: across ~60
+dependencies exactly as advertised. Nothing in the corpus is ever fabricated: across ~70
 malformed, truncated, deceptive and adversarial inputs there was no crash and no invented
 content, and the one place where fabrication *was* happening (H-5) is fixed.
 
@@ -554,7 +568,7 @@ pip install -e ".[all,dev]"
 pip install hypothesis pyyaml psutil                 # property tests and benchmark
 pip install reportlab python-docx python-pptx openpyxl pillow odfpy xlwt  # fixtures
 
-pytest -q                                            # 98 passed, 1 skipped
+pytest -q                                            # 101 passed, 1 skipped
 ruff check .
 
 python audit/gen_fixtures.py build/fixtures          # 43 format fixtures
@@ -566,7 +580,7 @@ python audit/check_corpus.py <a corpus directory>    # independent integrity che
 
 | Artifact | Purpose |
 |---|---|
-| `tests/test_audit_regressions.py` | 56 tests, one or more per defect; all fail on `29f27d5` |
+| `tests/test_audit_regressions.py` | 59 tests, one or more per defect; all fail on `29f27d5` |
 | `tests/test_audit_properties.py` | 13 Hypothesis properties over the output contract |
 | `audit/gen_fixtures.py` | Generates 43 fixtures across every claimed format family |
 | `audit/make_msg.py` | Builds a valid CFB/OLE2 Outlook `.msg` from scratch |

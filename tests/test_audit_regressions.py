@@ -713,3 +713,58 @@ def test_lock_is_released_when_a_run_fails(tmp_path: Path) -> None:
         Pipeline().run(source, out, PipelineSettings(strict=True))
     assert not (out / ".brainforgemd" / "lock").exists()
     Pipeline().run(source, out, PipelineSettings())
+
+
+# --------------------------------------------------------------- AUDIT-20
+def test_output_directory_containing_the_source_is_rejected(tmp_path: Path) -> None:
+    """AUDIT-20: an output directory above the source excluded every file through the
+    "never re-ingest the corpus" filter, so `convert ./docs -o .` reported discovered=0,
+    wrote an empty corpus and exited 0."""
+    out = tmp_path / "work"
+    source = out / "knowledge"
+    source.mkdir(parents=True)
+    for index in range(3):
+        (source / f"f{index}.txt").write_text(f"real content {index}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="contains the source directory"):
+        Pipeline().run(source, out, PipelineSettings())
+
+    # The supported arrangement, output nested inside the source, still works.
+    nested = source / "context-out"
+    stats = Pipeline().run(source, nested, PipelineSettings())
+    assert stats.converted == 3
+
+
+def test_archive_members_differing_only_by_case_are_reported(tmp_path: Path) -> None:
+    """AUDIT-20: archive names are case-sensitive but Windows and macOS filesystems are
+    not, so a ZIP holding Report.txt and report.txt extracted into one file and the
+    manifest attributed the surviving text to both source paths."""
+    archive_path = tmp_path / "case.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("Report.txt", "UPPERCASE_SOURCE_CONTENT")
+        archive.writestr("report.txt", "lowercase_source_content")
+
+    out = tmp_path / "out"
+    stats = Pipeline().run(archive_path, out, PipelineSettings())
+
+    if os.path.normcase("A") == os.path.normcase("a"):
+        # Case-insensitive host: the clash must be reported, never silently resolved.
+        assert stats.converted == 0
+        assert stats.failed == 1
+        assert "same file" in _jsonl(out / "errors.jsonl")[0]["message"]
+    else:
+        # Case-sensitive host: both members are genuinely distinct files.
+        assert stats.converted == 2
+        texts = {c["source_path"]: c["text"] for c in _jsonl(out / "chunks.jsonl")}
+        assert "UPPERCASE_SOURCE_CONTENT" in texts["case.zip!/Report.txt"]
+        assert "lowercase_source_content" in texts["case.zip!/report.txt"]
+
+
+def test_distinct_archive_members_still_extract(tmp_path: Path) -> None:
+    archive_path = tmp_path / "ok.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("a/one.txt", "first")
+        archive.writestr("b/one.txt", "second")
+        archive.writestr("two.txt", "third")
+    out = tmp_path / "out"
+    assert Pipeline().run(archive_path, out, PipelineSettings()).converted == 3

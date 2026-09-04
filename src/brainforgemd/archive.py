@@ -91,6 +91,24 @@ def _write_member(target: Path, source, name: str) -> None:
         raise ValueError(f"Archive member cannot be written on this host: {name} ({exc})") from exc
 
 
+def _claim_member(taken: dict[str, str], target: Path, name: str) -> None:
+    """Refuse a member that would overwrite one already extracted from this archive.
+
+    Archive names are case-sensitive but Windows and macOS filesystems are not, so a ZIP
+    written on Linux holding both ``Report.txt`` and ``report.txt`` used to extract into a
+    single file. Both members were then converted from whichever content landed last, and
+    the manifest attributed that text to both source paths.
+    """
+    key = os.path.normcase(os.path.abspath(target))
+    previous = taken.get(key)
+    if previous is not None:
+        raise ValueError(
+            f"Archive members {previous!r} and {name!r} resolve to the same file on this "
+            f"filesystem; extracting them would silently discard one of them"
+        )
+    taken[key] = name
+
+
 def extract_archive(
     path: Path,
     destination: Path,
@@ -101,6 +119,7 @@ def extract_archive(
     if budget is None:
         budget = ArchiveBudget(limits.max_files, limits.max_expanded_bytes)
     files: list[Path] = []
+    taken: dict[str, str] = {}
     if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as archive:
             infos = archive.infolist()
@@ -112,6 +131,7 @@ def extract_archive(
                 budget.take_file(info.filename)
                 budget.take_bytes(info.file_size, info.filename)
                 target = _safe_target(destination, info.filename)
+                _claim_member(taken, target, info.filename)
                 with archive.open(info) as source:
                     _write_member(target, source, info.filename)
                 files.append(target)
@@ -125,6 +145,7 @@ def extract_archive(
                 budget.take_file(member.name)
                 budget.take_bytes(member.size, member.name)
                 target = _safe_target(destination, member.name)
+                _claim_member(taken, target, member.name)
                 source = archive.extractfile(member)
                 if source is None:
                     continue

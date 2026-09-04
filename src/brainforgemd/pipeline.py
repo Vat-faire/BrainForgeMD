@@ -75,6 +75,15 @@ class Pipeline:
             raise FileNotFoundError(str(input_path))
         if input_path == output_root:
             raise ValueError("Output directory cannot be the same as the input directory")
+        # An output directory that contains the source excludes every source through the
+        # "never re-ingest the corpus" filter, so `convert ./docs -o .` used to report
+        # discovered=0, write an empty corpus and exit 0.
+        if output_root in input_path.parents:
+            raise ValueError(
+                f"Output directory {output_root} contains the source directory {input_path}; "
+                "every source would be excluded as part of the corpus. Choose an output "
+                "directory outside the source tree, or a subdirectory of it."
+            )
         files: list[Path] = []
         for path in input_path.rglob("*"):
             if path.is_symlink():

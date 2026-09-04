@@ -78,11 +78,14 @@ def main() -> None:
                 parser = manifest[0]["parser"]
                 md = (out / manifest[0]["output_path"]).read_text(encoding="utf-8")
                 body = md.split("---\n\n", 1)[-1]
+                # Backends escape Markdown metacharacters (Docling emits MARKER\_PAGE\_3),
+                # so compare against an unescaped copy or every underscore looks missing.
+                probe = body.replace("\\", "")
                 marker = EXPECT.get(fx.name)
                 if marker is None:
                     status = "CONVERTED"
                     detail = f"{len(body)} md chars"
-                elif marker.lower() in body.lower():
+                elif marker.lower() in probe.lower():
                     status = "CONVERTED+VERIFIED"
                     detail = f"marker {marker!r} present, {len(body)} md chars"
                 else:

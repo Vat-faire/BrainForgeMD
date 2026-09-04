@@ -574,3 +574,31 @@ def test_formats_marks_backends_that_are_not_installed(monkeypatch) -> None:
     assert rows["outlook-msg"] is False
     assert rows["parquet"] is False
     assert rows["text"] is True
+
+
+# --------------------------------------------------------------- AUDIT-17
+def test_control_characters_in_a_title_keep_front_matter_valid_yaml(tmp_path: Path) -> None:
+    """AUDIT-17: json.dumps escapes code points below 0x20 but leaves DEL, the C1 block
+    and U+2028/U+2029 raw, and YAML rejects those even inside a quoted scalar. A title
+    carrying one produced a document whose front matter no YAML parser would read."""
+    yaml = pytest.importorskip("yaml")
+    from brainforgemd.frontmatter import render_front_matter
+
+    for bad in ["\x7f", "\x85", "\x9f", " ", " ", "﻿"]:
+        rendered = render_front_matter({"title": f"before{bad}after"})
+        parsed = yaml.safe_load(rendered[len("---\n") : -len("---\n\n")])
+        assert parsed["title"] == f"before{bad}after"
+
+
+def test_front_matter_keys_that_spell_yaml_keywords_stay_strings() -> None:
+    """AUDIT-17: an unquoted key such as `true` or `null` is read back as a boolean or
+    None rather than as the string it was written as."""
+    yaml = pytest.importorskip("yaml")
+    from brainforgemd.frontmatter import render_front_matter
+
+    rendered = render_front_matter({"true": 1, "null": 2, "off": 3, "title": "x", "n": 4})
+    parsed = yaml.safe_load(rendered[len("---\n") : -len("---\n\n")])
+    assert set(parsed) == {"true", "null", "off", "title", "n"}
+    # Ordinary keys must keep the documented unquoted rendering.
+    assert "\ntitle: " in rendered
+    assert "\nn: 4" in rendered

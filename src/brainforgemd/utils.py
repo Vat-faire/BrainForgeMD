@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import mimetypes
@@ -148,12 +149,28 @@ def json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def jsonl_write(path: Path, records: Iterable[dict[str, Any]]) -> None:
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write a corpus index file so readers never observe a partial one.
+
+    Opening the final path with mode "w" truncates it first, so an interrupted run — a
+    second run against the same output directory, Ctrl-C, a full disk — left a
+    zero-length or half-written manifest.jsonl that no consumer could parse. The
+    documents themselves were already written through a temporary file; the top-level
+    index files now are too.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        for record in records:
-            handle.write(json_dumps(record))
-            handle.write("\n")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8", newline="\n")
+        tmp.replace(path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
+
+
+def jsonl_write(path: Path, records: Iterable[dict[str, Any]]) -> None:
+    atomic_write_text(path, "".join(json_dumps(record) + "\n" for record in records))
 
 
 def safe_relpath(path: Path, root: Path) -> str:

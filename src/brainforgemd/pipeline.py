@@ -14,10 +14,18 @@ from .archive import ArchiveBudget, ArchiveLimits, extract_archive, is_archive
 from .chunking import ChunkSettings, chunk_markdown
 from .frontmatter import render_front_matter
 from .graph import build_graph
+from .lock import CorpusLock
 from .models import Chunk, ErrorRecord, PipelineStats, SourceInfo
 from .registry import ConverterRegistry, build_default_registry
 from .state import load_state, save_state
-from .utils import guess_mime, jsonl_write, safe_output_path, sha256_file, stable_id
+from .utils import (
+    atomic_write_text,
+    guess_mime,
+    jsonl_write,
+    safe_output_path,
+    sha256_file,
+    stable_id,
+)
 
 
 @dataclass(slots=True)
@@ -158,6 +166,21 @@ class Pipeline:
         full_scan = Path(input_path).resolve().is_dir()
         source_root, discovered = self._discover(input_path, settings.include_hidden, output_root)
         output_root.mkdir(parents=True, exist_ok=True)
+        # Nothing in the output contract survives two writers, and each run prunes what
+        # it considers the other's orphans, so a concurrent run is refused up front.
+        with CorpusLock(output_root):
+            return self._run_locked(
+                source_root, discovered, output_root, settings, full_scan
+            )
+
+    def _run_locked(
+        self,
+        source_root: Path,
+        discovered: list[Path],
+        output_root: Path,
+        settings: PipelineSettings,
+        full_scan: bool,
+    ) -> PipelineStats:
         stats = PipelineStats(discovered=len(discovered))
         errors: list[ErrorRecord] = []
         documents: list[dict[str, Any]] = []
@@ -374,7 +397,7 @@ class Pipeline:
             target = quote(doc["output_path"], safe="/")
             label = doc["source_path"].replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
             lines.append(f"- [{label}]({target}) — `{doc['parser']}` — {doc['chunk_count']} chunks")
-        (output_root / "INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+        atomic_write_text(output_root / "INDEX.md", "\n".join(lines) + "\n")
 
     @staticmethod
     def _write_report(output_root: Path, stats: PipelineStats, errors: list[ErrorRecord]) -> None:
@@ -394,4 +417,4 @@ class Pipeline:
                 lines.append(f"- `{error.source_path}` — **{error.error_type}**: {error.message}")
         else:
             lines.append("No conversion errors.")
-        (output_root / "REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+        atomic_write_text(output_root / "REPORT.md", "\n".join(lines) + "\n")

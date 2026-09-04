@@ -651,3 +651,65 @@ def test_source_modified_during_conversion_is_reported(tmp_path: Path) -> None:
     assert [m["source_path"] for m in _jsonl(out / "manifest.jsonl")] == ["stable.txt"]
     errors = _jsonl(out / "errors.jsonl")
     assert [e["error_type"] for e in errors] == ["SourceChangedDuringRead"]
+
+
+# --------------------------------------------------------------- AUDIT-19
+def test_corpus_index_files_are_written_atomically(tmp_path: Path) -> None:
+    """AUDIT-19: the index files were opened with mode "w", which truncates first, so an
+    interrupted write left a zero-length manifest.jsonl that no consumer could parse."""
+    from brainforgemd.utils import atomic_write_text
+
+    target = tmp_path / "manifest.jsonl"
+    target.write_text('{"kept": true}\n', encoding="utf-8")
+
+    class Boom(Exception):
+        pass
+
+    real_write_text = Path.write_text
+
+    def exploding(self: Path, *args, **kwargs):
+        if self.name.endswith(".tmp"):
+            real_write_text(self, *args, **kwargs)
+            raise Boom("interrupted mid-write")
+        return real_write_text(self, *args, **kwargs)
+
+    Path.write_text = exploding  # type: ignore[method-assign]
+    try:
+        with pytest.raises(Boom):
+            atomic_write_text(target, "replacement\n")
+    finally:
+        Path.write_text = real_write_text  # type: ignore[method-assign]
+
+    assert target.read_text(encoding="utf-8") == '{"kept": true}\n'
+    assert list(tmp_path.glob("*.tmp")) == [], "the temporary file must not be left behind"
+
+
+def test_a_second_concurrent_run_is_refused(tmp_path: Path) -> None:
+    """AUDIT-19: two runs sharing one output directory interleaved and each pruned the
+    other's documents as orphans, leaving chunks with no source and broken INDEX links."""
+    from brainforgemd.lock import CorpusLock, CorpusLocked
+
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "a.txt").write_text("content", encoding="utf-8")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    with CorpusLock(out), pytest.raises(CorpusLocked, match="Another BrainForgeMD run"):
+        Pipeline().run(source, out, PipelineSettings())
+
+    # The lock is released, so an ordinary run works again.
+    stats = Pipeline().run(source, out, PipelineSettings())
+    assert stats.converted == 1
+    assert not (out / ".brainforgemd" / "lock").exists()
+
+
+def test_lock_is_released_when_a_run_fails(tmp_path: Path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "a.bin").write_bytes(b"\x00binary")
+    out = tmp_path / "out"
+    with pytest.raises(RuntimeError):
+        Pipeline().run(source, out, PipelineSettings(strict=True))
+    assert not (out / ".brainforgemd" / "lock").exists()
+    Pipeline().run(source, out, PipelineSettings())

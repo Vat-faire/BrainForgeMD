@@ -30,7 +30,15 @@ Installer l’extra Docling :
 pip install "brainforgemd[docling] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```
 
-Selon la version de Docling installée et l’environnement, cela peut étendre le support vers les PDF, Word, PowerPoint, Excel, OpenDocument, images/OCR, HTML/Markdown, certains dialectes XML, des parcours de transcription audio/vidéo, VTT, LaTeX, courriel, EPUB et les autres formats pris en charge par cette version de Docling.
+Selon la version de Docling installée et l’environnement, cela peut étendre le support vers les PDF, Word, PowerPoint, Excel, OpenDocument, images/OCR, HTML/Markdown, certains dialectes XML, VTT, LaTeX, courriel, EPUB et les autres formats pris en charge par cette version de Docling.
+
+Deux capacités annoncées par Docling exigent des extras que `[docling]` seul n’installe pas :
+
+- **OpenDocument** exige `odfdo`, inclus dans `brainforgemd[all]` et `brainforgemd[odf]`.
+  Sans lui, `.odt`, `.ods` et `.odp` échouent.
+- **La transcription audio et vidéo** exige un modèle de reconnaissance vocale, installé
+  par `brainforgemd[asr]`. Il est délibérément exclu de `[all]` car il ajoute plusieurs
+  gigaoctets. Sans lui, tout fichier audio ou vidéo est signalé en échec.
 
 ## Fallback optionnel MarkItDown
 
@@ -57,11 +65,30 @@ brainforgemd formats
 brainforgemd doctor
 ```
 
+`brainforgemd formats` préfixe un convertisseur d’un `!` lorsque son moteur n’est pas
+installé sur la machine courante : une extension listée se distingue ainsi d’une
+extension réellement utilisable.
+
 ## Niveau actuel de validation
 
 Le noyau déterministe est couvert par la suite de tests automatisés et la matrice CI multiplateforme du projet.
 
-Les parcours optionnels PDF, Office, OCR, image, audio et vidéo sont intégrés, mais le projet en préversion **n’a pas encore été benchmarké ou validé de façon exhaustive sur un vaste corpus réel**. Le fait qu’un moteur optionnel installé expose un format ne garantit donc pas une qualité d’extraction identique pour tous les fichiers.
+Un audit indépendant a converti des fixtures générées pour PDF (multipage, Unicode,
+tableaux, images, numérisé/OCR, 300 pages), DOCX, XLSX, PPTX, ODT, ODS, ODP, `.xls`
+hérité, EPUB, Parquet, Outlook `.msg` et l’OCR JPEG/WEBP/BMP, en vérifiant que le
+contenu attendu survivait jusqu’au Markdown. Voir [VALIDATION.fr.md](../VALIDATION.fr.md).
+
+Lacunes connues des versions de moteurs testées :
+
+- **L’OCR PNG et TIFF renvoie un Markdown vide**, alors que le même texte est
+  correctement reconnu en JPEG, WEBP et BMP. Ces cas sont signalés en échec, jamais
+  fabriqués.
+- **Les formats hérités `.doc` et `.ppt`** passent par LibreOffice, qui doit être dans le
+  PATH.
+- L’audio et la vidéo exigent l’extra `[asr]` décrit plus haut.
+
+Le fait qu’un moteur optionnel installé expose un format ne garantit pas une qualité
+d’extraction identique pour tous les fichiers.
 
 ## Fichiers qui ne deviennent pas utilement du Markdown
 

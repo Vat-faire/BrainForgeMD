@@ -7,6 +7,7 @@ import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from . import __version__
 from .archive import ArchiveBudget, ArchiveLimits, extract_archive, is_archive
@@ -248,7 +249,9 @@ class Pipeline:
                     stats.skipped += 1
                 else:
                     try:
+                        stamp_before = path.stat()
                         result = self.registry.convert(path)
+                        stamp_after = path.stat()
                     except Exception as exc:
                         message = str(exc)
                         unsupported = message.startswith("No converter registered")
@@ -257,6 +260,28 @@ class Pipeline:
                         errors.append(ErrorRecord(source.relative_path, "convert", type(exc).__name__, message, source.sha256))
                         if settings.strict:
                             raise
+                        continue
+                    if (stamp_before.st_mtime_ns, stamp_before.st_size) != (
+                        stamp_after.st_mtime_ns,
+                        stamp_after.st_size,
+                    ):
+                        # The whole point of the ledger is that sha256 describes the bytes
+                        # the stored Markdown came from. If the source was rewritten while
+                        # it was being read, that guarantee no longer holds, so report the
+                        # file instead of publishing a hash for text it never contained.
+                        stats.failed += 1
+                        errors.append(
+                            ErrorRecord(
+                                source.relative_path,
+                                "convert",
+                                "SourceChangedDuringRead",
+                                "Source was modified while it was being converted; "
+                                "its recorded hash would not describe the extracted text",
+                                source.sha256,
+                            )
+                        )
+                        if settings.strict:
+                            raise RuntimeError(errors[-1].message)
                         continue
                     title = result.title or path.stem
                     parser = result.parser
@@ -343,8 +368,11 @@ class Pipeline:
     def _write_index(output_root: Path, documents: list[dict[str, Any]]) -> None:
         lines = ["# BrainForgeMD corpus index", "", f"Documents: {len(documents)}", ""]
         for doc in documents:
-            target = doc["output_path"]
-            label = doc["source_path"].replace("[", "\\[").replace("]", "\\]")
+            # An unescaped destination breaks the link: a ")" in the filename closes it
+            # early and a "#" turns the rest into a fragment, so documents/paren(1).txt.md
+            # resolved to "documents/paren(1".
+            target = quote(doc["output_path"], safe="/")
+            label = doc["source_path"].replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
             lines.append(f"- [{label}]({target}) — `{doc['parser']}` — {doc['chunk_count']} chunks")
         (output_root / "INDEX.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 

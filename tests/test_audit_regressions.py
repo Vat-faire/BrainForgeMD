@@ -602,3 +602,52 @@ def test_front_matter_keys_that_spell_yaml_keywords_stay_strings() -> None:
     # Ordinary keys must keep the documented unquoted rendering.
     assert "\ntitle: " in rendered
     assert "\nn: 4" in rendered
+
+
+# --------------------------------------------------------------- AUDIT-18
+def test_index_links_survive_parentheses_and_hashes(tmp_path: Path) -> None:
+    """AUDIT-18: only [ and ] were escaped, so a ")" in a filename closed the Markdown
+    link early and documents/paren(1).txt.md resolved to "documents/paren(1"."""
+    import re
+    from urllib.parse import unquote
+
+    source = tmp_path / "src"
+    source.mkdir()
+    for name in ["plain.txt", "with space.txt", "paren(1).txt", "hash#3.txt", "amp&4.txt"]:
+        (source / name).write_text("content", encoding="utf-8")
+    out = tmp_path / "out"
+    Pipeline().run(source, out, PipelineSettings())
+
+    index = (out / "INDEX.md").read_text(encoding="utf-8")
+    targets = re.findall(r"\]\(([^)\s]*)\)", index)
+    assert len(targets) == len(_jsonl(out / "manifest.jsonl"))
+    for target in targets:
+        assert (out / unquote(target)).is_file(), target
+
+
+def test_source_modified_during_conversion_is_reported(tmp_path: Path) -> None:
+    """AUDIT-18: if the source changed between hashing and conversion, manifest.jsonl
+    published a sha256 for bytes the stored Markdown never came from."""
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "stable.txt").write_text("stable content", encoding="utf-8")
+    racing = source / "racing.txt"
+    racing.write_text("ORIGINAL_CONTENT", encoding="utf-8")
+
+    pipeline = Pipeline()
+    original = pipeline.registry.convert
+
+    def convert(path: Path):
+        if path.name == "racing.txt":
+            time.sleep(0.01)
+            path.write_text("MUTATED_CONTENT_THAT_IS_LONGER", encoding="utf-8")
+        return original(path)
+
+    pipeline.registry.convert = convert  # type: ignore[method-assign]
+    out = tmp_path / "out"
+    stats = pipeline.run(source, out, PipelineSettings())
+
+    assert stats.converted == 1
+    assert [m["source_path"] for m in _jsonl(out / "manifest.jsonl")] == ["stable.txt"]
+    errors = _jsonl(out / "errors.jsonl")
+    assert [e["error_type"] for e in errors] == ["SourceChangedDuringRead"]

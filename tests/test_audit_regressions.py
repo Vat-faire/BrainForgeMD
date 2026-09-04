@@ -516,3 +516,61 @@ def test_html_title_is_not_duplicated_into_the_body(tmp_path: Path) -> None:
     body = result.markdown.split("\n\n", 1)[1]
     assert "My Title" not in body
     assert body.strip() == "Body text."
+
+
+# --------------------------------------------------------------- AUDIT-15
+def test_pdf_without_a_backend_is_reported_not_dumped_as_text(tmp_path: Path) -> None:
+    """AUDIT-15: an uncompressed PDF is mostly printable ASCII, so the last-resort text
+    converter accepted it whenever no rich backend was installed and wrote PDF object
+    syntax into the corpus as prose, reported as a successful conversion."""
+    from brainforgemd.converters.generic_text import GenericTextConverter
+
+    path = tmp_path / "doc.pdf"
+    path.write_text(
+        "%PDF-1.3\n1 0 obj\n<<\n/Type /Page\n>>\nendobj\ntrailer\n<<\n/Size 2\n>>\n%%EOF\n",
+        encoding="utf-8",
+    )
+    assert not GenericTextConverter().accepts(path)
+
+
+@pytest.mark.parametrize(
+    "name", ["a.pdf", "a.docx", "a.xlsx", "a.pptx", "a.odt", "a.png", "a.mp3", "a.mp4",
+             "a.zip", "a.tar.gz", "a.sqlite", "a.parquet", "a.epub"]
+)
+def test_binary_families_are_never_claimed_by_the_text_fallback(tmp_path: Path, name: str) -> None:
+    from brainforgemd.converters.generic_text import GenericTextConverter
+
+    path = tmp_path / name
+    path.write_text("plain looking bytes", encoding="utf-8")
+    assert not GenericTextConverter().accepts(path)
+
+
+def test_text_fallback_still_rescues_unknown_and_extensionless_files(tmp_path: Path) -> None:
+    from brainforgemd.converters.generic_text import GenericTextConverter
+
+    for name in ["README", "notes.unknownext", "CHANGELOG"]:
+        path = tmp_path / name
+        path.write_text("real prose content", encoding="utf-8")
+        assert GenericTextConverter().accepts(path), name
+
+
+# --------------------------------------------------------------- AUDIT-16
+def test_formats_marks_backends_that_are_not_installed(monkeypatch) -> None:
+    """AUDIT-16: the docs call `brainforgemd formats` the authority for a machine, but it
+    listed every rich extension even when the backend behind it was absent and each of
+    those files would fail."""
+    from brainforgemd.registry import build_default_registry
+
+    rows = {name: available for name, _, available in build_default_registry().format_rows()}
+    assert rows["text"] is True
+    assert rows["csv"] is True
+    assert "docling" in rows
+    assert "markitdown" in rows
+
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: None)
+    rows = {name: available for name, _, available in build_default_registry().format_rows()}
+    assert rows["docling"] is False
+    assert rows["markitdown"] is False
+    assert rows["outlook-msg"] is False
+    assert rows["parquet"] is False
+    assert rows["text"] is True

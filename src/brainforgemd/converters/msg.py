@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 from ..models import ConversionResult
@@ -9,6 +10,9 @@ from .base import ConversionUnavailable, Converter
 class MsgConverter(Converter):
     name = "outlook-msg"
     extensions = frozenset({".msg"})
+
+    def available(self) -> bool:
+        return importlib.util.find_spec("extract_msg") is not None
 
     def convert(self, path: Path) -> ConversionResult:
         try:

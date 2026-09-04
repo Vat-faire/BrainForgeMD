@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 from ..models import ConversionResult
@@ -10,6 +11,9 @@ class ParquetConverter(Converter):
     name = "parquet"
     extensions = frozenset({".parquet", ".pq"})
     max_rows = 200
+
+    def available(self) -> bool:
+        return importlib.util.find_spec("pyarrow") is not None
 
     def convert(self, path: Path) -> ConversionResult:
         try:

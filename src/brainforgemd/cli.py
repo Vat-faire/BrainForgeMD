@@ -71,10 +71,14 @@ def _cmd_convert(args: argparse.Namespace) -> int:
 
 def _cmd_formats() -> int:
     rows = build_default_registry().format_rows()
-    width = max(len(name) for name, _ in rows)
+    width = max(len(name) for name, _, _ in rows)
     print("BrainForgeMD converters")
-    for name, extensions in rows:
-        print(f"{name:<{width}}  {extensions or 'dynamic'}")
+    for name, extensions, available in rows:
+        marker = "  " if available else "! "
+        print(f"{marker}{name:<{width}}  {extensions or 'dynamic'}")
+    if any(not available for _, _, available in rows):
+        print()
+        print("! backend not installed on this machine; these extensions will be reported as failures")
     return 0
 
 

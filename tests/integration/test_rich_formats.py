@@ -34,7 +34,11 @@ def _make_docx(path: Path) -> None:
     doc = Document()
     doc.add_heading("BrainForgeMD DOCX integration fixture", level=1)
     doc.add_paragraph("This paragraph must survive document conversion.")
-    doc.add_table(rows=2, cols=2).cell(0, 0).text = "synthetic"
+    table = doc.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "synthetic"
+    table.cell(0, 1).text = "value"
+    table.cell(1, 0).text = "BrainForgeMD"
+    table.cell(1, 1).text = "42"
     doc.save(path)
 
 
@@ -152,22 +156,19 @@ def _build_rich_corpus(root: Path) -> list[str]:
     ]
 
 
-def test_rich_formats_through_real_pipeline(tmp_path: Path) -> None:
+def test_rich_formats_through_real_pipeline_and_incremental_replay(tmp_path: Path) -> None:
     source = tmp_path / "rich"
     out = tmp_path / "context-out"
     expected = _build_rich_corpus(source)
+    settings = PipelineSettings(chunk_chars=1200, overlap_chars=100, max_file_mb=128)
 
-    stats = Pipeline().run(
-        source,
-        out,
-        PipelineSettings(chunk_chars=1200, overlap_chars=100, max_file_mb=128),
-    )
+    first = Pipeline().run(source, out, settings)
     manifest = _jsonl(out / "manifest.jsonl")
     errors = _jsonl(out / "errors.jsonl")
     by_source = {item["source_path"]: item for item in manifest}
 
-    assert stats.unsupported == 0, errors
-    assert stats.failed == 0, errors
+    assert first.unsupported == 0, errors
+    assert first.failed == 0, errors
     assert set(expected) <= set(by_source), (expected, by_source, errors)
 
     for source_name in expected:
@@ -184,19 +185,13 @@ def test_rich_formats_through_real_pipeline(tmp_path: Path) -> None:
     )
     assert "brainforgemd" in text_joined
 
-
-def test_rich_formats_are_incremental(tmp_path: Path) -> None:
-    source = tmp_path / "rich"
-    out = tmp_path / "context-out"
-    expected = _build_rich_corpus(source)
-    settings = PipelineSettings(chunk_chars=1200, overlap_chars=100, max_file_mb=128)
-
-    first = Pipeline().run(source, out, settings)
-    manifest_before = (out / "manifest.jsonl").read_bytes()
+    stable_before = {
+        name: (out / name).read_bytes()
+        for name in ["manifest.jsonl", "chunks.jsonl", "nodes.jsonl", "edges.jsonl"]
+    }
     second = Pipeline().run(source, out, settings)
-
-    assert first.failed == 0
     assert second.failed == 0
     assert second.converted == 0
     assert second.skipped == len(expected)
-    assert (out / "manifest.jsonl").read_bytes() == manifest_before
+    for name, before in stable_before.items():
+        assert (out / name).read_bytes() == before, name

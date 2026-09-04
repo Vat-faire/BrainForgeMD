@@ -10,7 +10,6 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 pytest
 ruff check .
-mypy src/brainforgemd
 ```
 
 ## Adding a converter

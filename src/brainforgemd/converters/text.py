@@ -11,7 +11,6 @@ from ..models import ConversionResult
 from ..utils import clean_text, decode_text, fenced
 from .base import Converter
 
-
 TEXT_EXTENSIONS = frozenset({
     ".txt", ".md", ".markdown", ".rst", ".log", ".adoc", ".asciidoc",
 })
@@ -155,7 +154,11 @@ class HtmlConverter(Converter):
         title_match = re.search(r"(?is)<title[^>]*>(.*?)</title>", text)
         title = html.unescape(re.sub(r"<[^>]+>", "", title_match.group(1)).strip()) if title_match else path.stem
         for level in range(6, 0, -1):
-            text = re.sub(fr"(?is)<h{level}[^>]*>(.*?)</h{level}>", lambda m: "\n" + "#" * level + " " + re.sub(r"<[^>]+>", "", m.group(1)).strip() + "\n", text)
+            text = re.sub(
+                fr"(?is)<h{level}[^>]*>(.*?)</h{level}>",
+                lambda m, level=level: "\n" + "#" * level + " " + re.sub(r"<[^>]+>", "", m.group(1)).strip() + "\n",
+                text,
+            )
         text = re.sub(r'(?is)<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', lambda m: f"[{re.sub(r'<[^>]+>', '', m.group(2)).strip()}]({m.group(1)})", text)
         text = re.sub(r"(?is)<br\s*/?>", "\n", text)
         text = re.sub(r"(?is)</(p|div|li|tr|section|article)>", "\n", text)

@@ -52,16 +52,16 @@ Every Markdown document begins with YAML-compatible front matter containing a st
 
 ## Install
 
-Zero-dependency core install, useful for text/code/data/email/notebook/SQLite/archive conversion:
+Install the zero-dependency core directly from GitHub, useful for text/code/data/email/notebook/SQLite/archive conversion:
 
 ```bash
-pip install brainforgemd
+pip install "brainforgemd @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```
 
-Full local document/media support:
+Install the full local document/media stack:
 
 ```bash
-pip install "brainforgemd[all]"
+pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
 ```
 
 For development from source:

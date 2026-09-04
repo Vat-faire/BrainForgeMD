@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from .models import Chunk
 from .utils import sha256_text, stable_id
 
-
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 
 

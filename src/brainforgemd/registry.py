@@ -11,7 +11,14 @@ from .converters.parquet import ParquetConverter
 from .converters.rich import DoclingConverter, MarkItDownConverter
 from .converters.sqlite import SqliteConverter
 from .converters.subtitles import SubtitleConverter
-from .converters.text import CodeConverter, CsvConverter, HtmlConverter, JsonConverter, PlainTextConverter, XmlConverter
+from .converters.text import (
+    CodeConverter,
+    CsvConverter,
+    HtmlConverter,
+    JsonConverter,
+    PlainTextConverter,
+    XmlConverter,
+)
 from .models import ConversionResult
 
 

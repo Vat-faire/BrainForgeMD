@@ -5,7 +5,6 @@ from pathlib import Path
 from ..models import ConversionResult
 from .base import ConversionUnavailable, Converter
 
-
 RICH_EXTENSIONS = frozenset({
     ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".odt", ".ods", ".odp",
     ".epub", ".mobi", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp",

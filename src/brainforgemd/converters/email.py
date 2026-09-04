@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import email
 import html
 import re
@@ -42,10 +43,8 @@ class EmlConverter(Converter):
                     payload = part.get_payload(decode=True) or b""
                     text_parts.append(payload.decode(part.get_content_charset() or "utf-8", errors="replace"))
             elif content_type == "text/html":
-                try:
+                with contextlib.suppress(Exception):
                     html_parts.append(part.get_content())
-                except Exception:
-                    pass
         body = "\n\n".join(text_parts).strip()
         if not body and html_parts:
             raw = "\n".join(html_parts)

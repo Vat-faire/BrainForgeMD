@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import re
+from itertools import pairwise
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
 
 from .models import Chunk
 from .utils import stable_id
-
 
 _MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 _URL_RE = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
@@ -54,9 +54,9 @@ def build_graph(
             }
         )
 
-    for source_id, source_chunks in chunks_by_source.items():
+    for source_chunks in chunks_by_source.values():
         ordered = sorted(source_chunks, key=lambda c: c.ordinal)
-        for left, right in zip(ordered, ordered[1:], strict=False):
+        for left, right in pairwise(ordered):
             edges.append(
                 {
                     "id": stable_id("edge", left.chunk_id, right.chunk_id, "next"),

@@ -1,4 +1,4 @@
-"""Cross-platform archive error normalization regressions."""
+"""Cross-platform archive portability regressions."""
 
 from __future__ import annotations
 
@@ -37,3 +37,25 @@ def test_archive_write_oserror_is_normalized_to_value_error(tmp_path: Path, monk
         extract_archive(archive_path, destination, ArchiveLimits())
 
     assert not refused.exists()
+
+
+def test_case_only_archive_collision_is_rejected_on_every_os(tmp_path: Path) -> None:
+    """The same archive must not mean different things on Linux, macOS, and Windows."""
+    archive_path = tmp_path / "case.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("Report.txt", "UPPERCASE_SOURCE_CONTENT")
+        archive.writestr("report.txt", "lowercase_source_content")
+
+    with pytest.raises(ValueError, match="same portable file identity"):
+        extract_archive(archive_path, tmp_path / "dest", ArchiveLimits())
+
+
+def test_unicode_normalization_archive_collision_is_rejected(tmp_path: Path) -> None:
+    """NFC/NFD-equivalent names are also non-portable on common macOS volumes."""
+    archive_path = tmp_path / "unicode.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("caf\u00e9.txt", "NFC")
+        archive.writestr("cafe\u0301.txt", "NFD")
+
+    with pytest.raises(ValueError, match="same portable file identity"):
+        extract_archive(archive_path, tmp_path / "dest", ArchiveLimits())

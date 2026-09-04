@@ -1,7 +1,5 @@
 """Shared pytest configuration for platform-specific regression cases."""
 
-from __future__ import annotations
-
 import os
 
 import pytest

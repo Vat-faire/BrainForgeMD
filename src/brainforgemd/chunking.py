@@ -20,8 +20,11 @@ class ChunkSettings:
             raise ValueError("target_chars must be >= 500")
         if self.overlap_chars < 0:
             raise ValueError("overlap_chars must be >= 0")
-        if self.overlap_chars >= self.target_chars:
-            raise ValueError("overlap_chars must be smaller than target_chars")
+        # Each window advances by target - overlap, so an overlap close to the target
+        # advances a few characters at a time and duplicates the document hundreds of
+        # times over. Half the target caps total chunk text at roughly twice the source.
+        if self.overlap_chars > self.target_chars // 2:
+            raise ValueError("overlap_chars must be at most half of target_chars")
 
 
 def _sections(markdown: str) -> list[tuple[list[str], str]]:
@@ -92,7 +95,10 @@ def chunk_markdown(
     raw: list[tuple[list[str], str]] = []
     for path, section in _sections(markdown):
         for piece in _split_window(section, settings.target_chars, settings.overlap_chars):
-            raw.append((path, piece))
+            # A blank source used to yield one zero-length chunk, which is pure noise
+            # for a retrieval index.
+            if piece.strip():
+                raw.append((path, piece))
 
     # Merge tiny adjacent chunks from the same section when safe.
     merged: list[tuple[list[str], str]] = []

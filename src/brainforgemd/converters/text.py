@@ -225,10 +225,18 @@ class HtmlConverter(Converter):
                 text,
             )
         text = re.sub(r'(?is)<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', lambda m: f"[{re.sub(r'<[^>]+>', '', m.group(2)).strip()}]({m.group(1)})", text)
+        # The <head> is metadata, and leaving it in duplicated the title into the body.
+        text = re.sub(r"(?is)<head[^>]*>.*?</head>", "", text)
         text = re.sub(r"(?is)<br\s*/?>", "\n", text)
-        text = re.sub(r"(?is)</(p|div|li|tr|section|article)>", "\n", text)
+        text = re.sub(r"(?is)</(td|th)>", " | ", text)
+        text = re.sub(r"(?is)</(p|div|li|tr|section|article|h[1-6]|table|blockquote)>", "\n", text)
         text = re.sub(r"(?is)<li[^>]*>", "- ", text)
-        text = re.sub(r"(?is)<[^>]+>", "", text)
+        # Drop remaining tags for a space, not for nothing: adjacent cells and inline
+        # elements used to fuse into tokens that match neither word ("AlphaBeta").
+        text = re.sub(r"(?is)<[^>]+>", " ", text)
         text = html.unescape(text)
+        text = re.sub(r"[ \t]{2,}", " ", text)
+        text = re.sub(r"(?m)^[ \t]*\|[ \t]*|[ \t]*\|[ \t]*$", "", text)
+        text = re.sub(r"(?m)^[ \t]+", "", text)
         text = re.sub(r"\n{3,}", "\n\n", clean_text(text))
         return ConversionResult(f"# {title}\n\n{text}", self.name, title, {"encoding": encoding})

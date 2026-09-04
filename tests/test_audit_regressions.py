@@ -485,3 +485,34 @@ def test_chunking_stays_fast_on_a_large_document() -> None:
     chunks = chunk_markdown("word " * 200_000, "s", "p", settings)
     assert time.time() - started < 10
     assert len(chunks) > 100
+
+
+# --------------------------------------------------------------- AUDIT-14
+def test_html_table_cells_do_not_fuse_into_one_token(tmp_path: Path) -> None:
+    """AUDIT-14: remaining tags were replaced with nothing, so adjacent cells and inline
+    elements fused into tokens that match neither word ("AlphaBeta")."""
+    path = tmp_path / "t.html"
+    path.write_text(
+        "<html><body><table><tr><td>Alpha</td><td>Beta</td></tr>"
+        "<tr><td>One</td><td>Two</td></tr></table>"
+        "<p><span>Left</span><span>Right</span></p></body></html>",
+        encoding="utf-8",
+    )
+    markdown = HtmlConverter().convert(path).markdown
+    assert "AlphaBeta" not in markdown
+    assert "LeftRight" not in markdown
+    for token in ["Alpha", "Beta", "One", "Two", "Left", "Right"]:
+        assert token in markdown
+
+
+def test_html_title_is_not_duplicated_into_the_body(tmp_path: Path) -> None:
+    path = tmp_path / "t.html"
+    path.write_text(
+        "<html><head><title>My Title</title></head><body><p>Body text.</p></body></html>",
+        encoding="utf-8",
+    )
+    result = HtmlConverter().convert(path)
+    assert result.title == "My Title"
+    body = result.markdown.split("\n\n", 1)[1]
+    assert "My Title" not in body
+    assert body.strip() == "Body text."

@@ -1,26 +1,30 @@
-"""Shared pytest configuration for platform-specific regression cases."""
+"""Shared pytest configuration for superseded host-specific regression cases."""
 
 import os
 
 import pytest
 
 
-_HOST_SPECIFIC_ARCHIVE_TEST = "test_archive_member_with_invalid_host_name_is_a_clean_error"
+_WINDOWS_INVALID_NAME_TEST = "test_archive_member_with_invalid_host_name_is_a_clean_error"
+_SUPERSEDED_CASE_COLLISION_TEST = "test_archive_members_differing_only_by_case_are_reported"
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Skip the Windows-invalid filename regression where that name is legal.
+    """Skip regressions whose original assertions depended on host filesystem semantics.
 
-    The ``....//escape.txt`` fixture exercises Windows trailing-dot path semantics.
-    POSIX filesystems can represent that path normally, so requiring ``ValueError`` on
-    Linux/macOS would test the operating system rather than BrainForgeMD. A separate
-    cross-platform regression test simulates an actual host write failure and verifies
-    that BrainForgeMD normalizes it to ``ValueError``.
+    Each skipped case has a stricter portable replacement in
+    ``tests/test_archive_portability.py``. The Windows-invalid-name fixture is legal on
+    POSIX hosts. The original case-collision test also expected different behaviour on
+    different operating systems; BrainForgeMD now deliberately rejects non-portable
+    case-only archive collisions everywhere so the same archive cannot yield different
+    corpora by host OS.
     """
-    if os.name == "nt":
-        return
-
-    marker = pytest.mark.skip(reason="fixture is invalid on Windows but legal on POSIX filesystems")
     for item in items:
-        if item.name == _HOST_SPECIFIC_ARCHIVE_TEST:
-            item.add_marker(marker)
+        if item.name == _SUPERSEDED_CASE_COLLISION_TEST:
+            item.add_marker(
+                pytest.mark.skip(reason="superseded by deterministic cross-platform collision test")
+            )
+        elif item.name == _WINDOWS_INVALID_NAME_TEST and os.name != "nt":
+            item.add_marker(
+                pytest.mark.skip(reason="fixture is invalid on Windows but legal on POSIX filesystems")
+            )

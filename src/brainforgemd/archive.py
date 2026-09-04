@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import tarfile
+import unicodedata
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -91,20 +92,35 @@ def _write_member(target: Path, source, name: str) -> None:
         raise ValueError(f"Archive member cannot be written on this host: {name} ({exc})") from exc
 
 
-def _claim_member(taken: dict[str, str], target: Path, name: str) -> None:
-    """Refuse a member that would overwrite one already extracted from this archive.
+def _portable_collision_key(target: Path) -> str:
+    """Return a conservative cross-platform identity for an extracted path.
 
-    Archive names are case-sensitive but Windows and macOS filesystems are not, so a ZIP
-    written on Linux holding both ``Report.txt`` and ``report.txt`` used to extract into a
-    single file. Both members were then converted from whichever content landed last, and
-    the manifest attributed that text to both source paths.
+    Windows and the default macOS filesystems are case-insensitive, while Python's
+    ``os.path.normcase`` only folds case on Windows. Using the host function therefore
+    allowed ``Report.txt`` and ``report.txt`` to overwrite each other on macOS. A corpus
+    is expected to be reproducible across supported operating systems, so BrainForgeMD
+    deliberately rejects case-only and Unicode-normalization-only archive collisions on
+    every host, including case-sensitive Linux filesystems.
     """
-    key = os.path.normcase(os.path.abspath(target))
+    absolute = os.path.abspath(target)
+    return unicodedata.normalize("NFC", absolute).casefold()
+
+
+def _claim_member(taken: dict[str, str], target: Path, name: str) -> None:
+    """Refuse archive members whose output paths are not portable as distinct files.
+
+    Archive names are case-sensitive, but Windows and typical macOS filesystems are not.
+    Accepting a case-only pair on Linux and rejecting or overwriting it elsewhere makes
+    the same archive produce a different corpus by operating system. The conservative
+    collision key therefore applies on every platform.
+    """
+    key = _portable_collision_key(target)
     previous = taken.get(key)
     if previous is not None:
         raise ValueError(
-            f"Archive members {previous!r} and {name!r} resolve to the same file on this "
-            f"filesystem; extracting them would silently discard one of them"
+            f"Archive members {previous!r} and {name!r} resolve to the same portable file "
+            "identity; extracting them would silently discard or misattribute content on "
+            "a supported filesystem"
         )
     taken[key] = name
 

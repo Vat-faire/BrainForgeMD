@@ -32,7 +32,7 @@ def test_archive_is_extracted_safely_and_converted(tmp_path: Path) -> None:
         zf.writestr("nested/readme.txt", "hello archive")
     out = tmp_path / "out"
     stats = Pipeline().run(source, out, PipelineSettings(chunk_chars=1000, overlap_chars=100))
-    assert stats.converted == 1
+    assert stats.converted == 1, (out / "errors.jsonl").read_text(encoding="utf-8")
     manifest = read_jsonl(out / "manifest.jsonl")
     assert manifest[0]["source_path"].endswith("archive.zip!/nested/readme.txt")
 

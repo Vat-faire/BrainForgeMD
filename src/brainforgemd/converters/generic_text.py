@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import codecs
 from pathlib import Path
 
 from ..archive import ARCHIVE_SUFFIXES
@@ -33,16 +34,46 @@ class GenericTextConverter(Converter):
         ):
             return False
         try:
-            sample = path.read_bytes()[:65536]
+            with path.open("rb") as source:
+                prefix = source.read(4)
+                if not prefix:
+                    return True
+                bom_encoding = next(
+                    (
+                        encoding
+                        for bom, encoding in (
+                            (b"\xff\xfe\x00\x00", "utf-32"),
+                            (b"\x00\x00\xfe\xff", "utf-32"),
+                            (b"\xef\xbb\xbf", "utf-8-sig"),
+                            (b"\xff\xfe", "utf-16"),
+                            (b"\xfe\xff", "utf-16"),
+                        )
+                        if prefix.startswith(bom)
+                    ),
+                    None,
+                )
+                if bom_encoding is not None:
+                    decoder = codecs.getincrementaldecoder(bom_encoding)(errors="strict")
+                    source.seek(0)
+                    while block := source.read(65536):
+                        decoder.decode(block, final=False)
+                    decoder.decode(b"", final=True)
+                    return True
+
+                source.seek(0)
+                controls = 0
+                total = 0
+                while block := source.read(65536):
+                    if b"\x00" in block:
+                        return False
+                    total += len(block)
+                    controls += sum(1 for byte in block if byte < 9 or 13 < byte < 32)
         except OSError:
             return False
-        if not sample:
-            return True
-        if b"\x00" in sample:
+        except UnicodeDecodeError:
             return False
-        # Reject obviously binary samples while accepting UTF-8/legacy text with some high bytes.
-        controls = sum(1 for byte in sample if byte < 9 or 13 < byte < 32)
-        return controls / len(sample) < 0.01
+        # Reject obviously binary data while accepting UTF-8/legacy text with high bytes.
+        return controls / total < 0.01
 
     def convert(self, path: Path) -> ConversionResult:
         text, encoding = decode_text(path.read_bytes())

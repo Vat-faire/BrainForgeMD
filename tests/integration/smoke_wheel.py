@@ -71,7 +71,7 @@ def main() -> int:
         if "BrainForgeMD clean wheel smoke test" not in markdown:
             raise SystemExit("Converted Markdown did not preserve fixture content")
         state = json.loads((output / ".brainforgemd" / "state.json").read_text(encoding="utf-8"))
-        if state["version"] != 1:
+        if state["version"] != 2:
             raise SystemExit("Incremental state file is invalid")
 
     print(f"Clean-wheel smoke test passed with {wheel.name}")

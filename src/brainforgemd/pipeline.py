@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import json
 import tempfile
+import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -17,15 +18,23 @@ from .graph import build_graph
 from .lock import CorpusLock
 from .models import Chunk, ErrorRecord, PipelineStats, SourceInfo
 from .registry import ConverterRegistry, build_default_registry
-from .state import load_state, save_state
+from .state import STATE_VERSION, load_state, save_state
+from .transaction import CorpusTransaction
 from .utils import (
     atomic_write_text,
     guess_mime,
     jsonl_write,
+    portable_path_key,
     safe_output_path,
     sha256_file,
+    sha256_text,
     stable_id,
 )
+
+# Conversion semantics can change while developing an unreleased package whose public
+# version remains 0.1.0. Including an explicit revision prevents older derived Markdown
+# from being silently reused after parser/security changes.
+PIPELINE_CACHE_REVISION = 2
 
 
 @dataclass(slots=True)
@@ -43,7 +52,8 @@ class PipelineSettings:
 
     def config_hash(self) -> str:
         payload = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256((__version__ + "\x1f" + payload).encode("utf-8")).hexdigest()
+        identity = f"{__version__}\x1f{PIPELINE_CACHE_REVISION}\x1f{payload}"
+        return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
 class Pipeline:
@@ -100,7 +110,13 @@ class Pipeline:
             except ValueError:
                 pass
             files.append(path)
-        files.sort(key=lambda p: p.relative_to(input_path).as_posix().lower())
+        files.sort(
+            key=lambda p: (
+                portable_path_key(p.relative_to(input_path).as_posix()),
+                unicodedata.normalize("NFC", p.relative_to(input_path).as_posix()),
+                p.relative_to(input_path).as_posix(),
+            )
+        )
         return input_path, files
 
     @staticmethod
@@ -131,44 +147,58 @@ class Pipeline:
         """
         logical = relative_path.replace("!", "__archive__")
         candidate = safe_output_path(output_root, logical)
-        key = candidate.relative_to(output_root).as_posix()
+        key = portable_path_key(candidate.relative_to(output_root).as_posix())
         owner = claimed.get(key)
         if owner is None or owner == relative_path:
             claimed[key] = relative_path
             return candidate
         candidate = safe_output_path(output_root, logical, disambiguate=True)
-        key = candidate.relative_to(output_root).as_posix()
+        key = portable_path_key(candidate.relative_to(output_root).as_posix())
+        owner = claimed.get(key)
+        if owner is not None and owner != relative_path:
+            raise ValueError(
+                f"Output paths for {owner!r} and {relative_path!r} cannot be "
+                "disambiguated portably"
+            )
         claimed[key] = relative_path
         return candidate
 
     @staticmethod
-    def _prune_orphan_documents(output_root: Path, keep: set[str]) -> int:
-        """Delete Markdown left behind by sources that no longer exist.
-
-        The README tells consumers to treat ``documents/**/*.md`` as the corpus, so
-        stale files for deleted or renamed sources were served as live content.
-        """
-        documents_root = (output_root / "documents").resolve()
+    def _orphan_documents(output_root: Path, keep: set[str]) -> list[Path]:
+        documents_root = output_root / "documents"
         if not documents_root.is_dir():
-            return 0
-        removed = 0
-        for path in sorted(documents_root.rglob("*"), reverse=True):
-            if path.is_dir():
-                try:
-                    next(path.iterdir())
-                except StopIteration:
-                    with contextlib.suppress(OSError):
-                        path.rmdir()
-                except OSError:
-                    pass
-                continue
-            relative = path.relative_to(output_root).as_posix()
-            if relative in keep:
-                continue
-            with contextlib.suppress(OSError):
-                path.unlink()
-                removed += 1
-        return removed
+            return []
+        return [
+            path
+            for path in documents_root.rglob("*")
+            if path.is_file() and path.relative_to(output_root).as_posix() not in keep
+        ]
+
+    @staticmethod
+    def _validate_single_file_target(
+        source_root: Path, discovered: list[Path], output_root: Path
+    ) -> None:
+        manifest_path = output_root / "manifest.jsonl"
+        if not manifest_path.exists():
+            return
+        logical = discovered[0].relative_to(source_root).as_posix()
+        try:
+            rows = [
+                json.loads(line)
+                for line in manifest_path.read_text(encoding="utf-8").splitlines()
+                if line
+            ]
+            existing = {row["source_path"] for row in rows}
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise ValueError(
+                "Cannot safely apply a single-file run to a corpus with an unreadable manifest"
+            ) from exc
+        allowed = {path for path in existing if path == logical or path.startswith(f"{logical}!/")}
+        if existing != allowed:
+            raise ValueError(
+                "A single-file run cannot update a corpus containing other sources; "
+                "run the source directory to rebuild global artifacts consistently"
+            )
 
     def run(self, input_path: Path, output_root: Path, settings: PipelineSettings) -> PipelineStats:
         output_root = output_root.resolve()
@@ -195,7 +225,14 @@ class Pipeline:
         documents: list[dict[str, Any]] = []
         all_chunks: list[Chunk] = []
         old_state = load_state(output_root)
-        new_state: dict[str, Any] = {"version": 1, "config_hash": settings.config_hash(), "files": {}}
+        if not full_scan:
+            self._validate_single_file_target(source_root, discovered, output_root)
+        transaction = CorpusTransaction(output_root)
+        new_state: dict[str, Any] = {
+            "version": STATE_VERSION,
+            "config_hash": settings.config_hash(),
+            "files": {},
+        }
         previous_files = old_state.get("files", {}) if settings.incremental else {}
         config_hash = settings.config_hash()
         max_bytes = settings.max_file_mb * 1024 * 1024
@@ -238,7 +275,10 @@ class Pipeline:
                     try:
                         extracted = extract_archive(path, Path(tempdir.name), archive_limits, archive_budget)
                         prefix = logical_relative + "!"
-                        for child in sorted(extracted, key=lambda p: p.as_posix().lower()):
+                        for child in sorted(
+                            extracted,
+                            key=lambda p: (portable_path_key(p.as_posix()), p.as_posix()),
+                        ):
                             child_rel = child.relative_to(Path(tempdir.name)).as_posix()
                             queue.append((child, f"{prefix}/{child_rel}", depth + 1))
                     except Exception as exc:
@@ -259,12 +299,18 @@ class Pipeline:
                     continue
 
                 previous = previous_files.get(source.relative_path, {})
+                if not isinstance(previous, dict):
+                    previous = {}
+                cached_output_sha256 = ""
+                if output_path.is_file() and isinstance(previous.get("output_sha256"), str):
+                    with contextlib.suppress(OSError):
+                        cached_output_sha256 = sha256_file(output_path)
                 if (
                     settings.incremental
                     and previous.get("sha256") == source.sha256
                     and previous.get("config_hash") == config_hash
                     and previous.get("output_path") == output_path.relative_to(output_root).as_posix()
-                    and output_path.exists()
+                    and cached_output_sha256 == previous.get("output_sha256")
                 ):
                     # Re-read existing Markdown so indexes/graph/chunks can still be rebuilt consistently.
                     try:
@@ -315,6 +361,36 @@ class Pipeline:
                         if settings.strict:
                             raise RuntimeError(errors[-1].message)
                         continue
+                    try:
+                        digest_after = sha256_file(path)
+                    except OSError as exc:
+                        stats.failed += 1
+                        errors.append(
+                            ErrorRecord(
+                                source.relative_path,
+                                "convert",
+                                "SourceChangedDuringRead",
+                                f"Source could not be verified after conversion: {exc}",
+                                source.sha256,
+                            )
+                        )
+                        if settings.strict:
+                            raise
+                        continue
+                    if digest_after != source.sha256:
+                        stats.failed += 1
+                        errors.append(
+                            ErrorRecord(
+                                source.relative_path,
+                                "convert",
+                                "SourceChangedDuringRead",
+                                "Source content changed between provenance hashing and conversion",
+                                source.sha256,
+                            )
+                        )
+                        if settings.strict:
+                            raise RuntimeError(errors[-1].message)
+                        continue
                     title = result.title or path.stem
                     parser = result.parser
                     fields = {
@@ -337,10 +413,7 @@ class Pipeline:
                     # MAX_PATH, a permission problem, a full disk). That must isolate the
                     # document, not abandon the corpus and its incremental state.
                     try:
-                        output_path.parent.mkdir(parents=True, exist_ok=True)
-                        tmp = output_path.with_suffix(output_path.suffix + ".tmp")
-                        tmp.write_text(full_md, encoding="utf-8", newline="\n")
-                        tmp.replace(output_path)
+                        transaction.stage_text(output_path, full_md)
                     except OSError as exc:
                         stats.failed += 1
                         errors.append(ErrorRecord(source.relative_path, "write", type(exc).__name__, str(exc), source.sha256))
@@ -348,6 +421,7 @@ class Pipeline:
                             raise
                         continue
                     stats.converted += 1
+                    cached_output_sha256 = sha256_text(full_md)
 
                 chunks = chunk_markdown(body, source.source_id, source.relative_path, chunk_settings)
                 stats.chunks += len(chunks)
@@ -372,28 +446,37 @@ class Pipeline:
                     "source_id": source.source_id,
                     "title": title,
                     "parser": parser,
+                    "output_sha256": cached_output_sha256,
                 }
         finally:
             for tempdir in archive_tempdirs:
                 tempdir.cleanup()
 
-        if full_scan:
-            # Only a whole-tree scan knows the complete set of live documents; a
-            # single-file run must never delete the rest of an existing corpus.
-            self._prune_orphan_documents(output_root, {doc["output_path"] for doc in documents})
-
         documents.sort(key=lambda d: d["source_path"].lower())
         all_chunks.sort(key=lambda c: (c.source_path.lower(), c.ordinal))
         manifest = [{k: v for k, v in doc.items() if k != "markdown"} for doc in documents]
-        jsonl_write(output_root / "manifest.jsonl", manifest)
-        jsonl_write(output_root / "chunks.jsonl", (chunk.to_dict() for chunk in all_chunks))
-        jsonl_write(output_root / "errors.jsonl", (record.to_dict() for record in errors))
-        nodes, edges = build_graph(documents, all_chunks)
-        jsonl_write(output_root / "nodes.jsonl", nodes)
-        jsonl_write(output_root / "edges.jsonl", edges)
-        self._write_index(output_root, documents)
-        self._write_report(output_root, stats, errors)
-        save_state(output_root, new_state)
+        staging_root = transaction.staged
+        try:
+            jsonl_write(staging_root / "manifest.jsonl", manifest)
+            jsonl_write(staging_root / "chunks.jsonl", (chunk.to_dict() for chunk in all_chunks))
+            jsonl_write(staging_root / "errors.jsonl", (record.to_dict() for record in errors))
+            nodes, edges = build_graph(documents, all_chunks)
+            jsonl_write(staging_root / "nodes.jsonl", nodes)
+            jsonl_write(staging_root / "edges.jsonl", edges)
+            self._write_index(staging_root, documents)
+            self._write_report(staging_root, stats, errors)
+            save_state(staging_root, new_state)
+            orphans = (
+                self._orphan_documents(
+                    output_root, {doc["output_path"] for doc in documents}
+                )
+                if full_scan
+                else []
+            )
+            transaction.commit(orphans)
+        except BaseException:
+            transaction.abort()
+            raise
         return stats
 
     @staticmethod

@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 import shutil
 import tarfile
-import unicodedata
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+from .utils import portable_path_key
 
 ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz", ".tar.bz2", ".tar.xz")
 
@@ -102,8 +103,7 @@ def _portable_collision_key(target: Path) -> str:
     deliberately rejects case-only and Unicode-normalization-only archive collisions on
     every host, including case-sensitive Linux filesystems.
     """
-    absolute = os.path.abspath(target)
-    return unicodedata.normalize("NFC", absolute).casefold()
+    return portable_path_key(os.path.abspath(target))
 
 
 def _claim_member(taken: dict[str, str], target: Path, name: str) -> None:

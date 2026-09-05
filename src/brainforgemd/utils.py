@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import re
+import unicodedata
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -149,6 +150,22 @@ def json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def portable_path_key(path: Path | str) -> str:
+    """Return a conservative identity shared by supported filesystems.
+
+    Default Windows and macOS filesystems do not distinguish case or Unicode
+    normalization forms. Windows additionally ignores trailing spaces and dots in
+    each path component. Treating those spellings as different on Linux can create a
+    corpus that overwrites or misattributes documents when copied to another host.
+    """
+    normalized = str(path).replace("\\", "/")
+    parts = [
+        unicodedata.normalize("NFC", part).casefold().rstrip(" .")
+        for part in normalized.split("/")
+    ]
+    return "/".join(parts)
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     """Write a corpus index file so readers never observe a partial one.
 
@@ -170,7 +187,19 @@ def atomic_write_text(path: Path, text: str) -> None:
 
 
 def jsonl_write(path: Path, records: Iterable[dict[str, Any]]) -> None:
-    atomic_write_text(path, "".join(json_dumps(record) + "\n" for record in records))
+    """Atomically stream JSON Lines without duplicating the full corpus in memory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8", newline="\n") as sink:
+            for record in records:
+                sink.write(json_dumps(record))
+                sink.write("\n")
+        tmp.replace(path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
 
 
 def safe_relpath(path: Path, root: Path) -> str:

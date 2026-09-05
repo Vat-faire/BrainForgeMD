@@ -297,9 +297,8 @@ def test_deleted_and_renamed_sources_do_not_leave_orphan_documents(tmp_path: Pat
     assert on_disk == {"alpha-renamed.txt.md"}
 
 
-def test_single_file_run_never_prunes_sibling_documents(tmp_path: Path) -> None:
-    """Pruning must only apply to a full directory scan; a one-file run must not wipe
-    the rest of an existing corpus."""
+def test_single_file_run_refuses_a_multi_source_corpus(tmp_path: Path) -> None:
+    """A one-file run cannot rewrite global artifacts while keeping sibling documents."""
     source = tmp_path / "src"
     source.mkdir()
     (source / "a.txt").write_text("a content", encoding="utf-8")
@@ -308,7 +307,8 @@ def test_single_file_run_never_prunes_sibling_documents(tmp_path: Path) -> None:
     Pipeline().run(source, out, PipelineSettings())
     assert {p.name for p in (out / "documents").rglob("*.md")} == {"a.txt.md", "b.txt.md"}
 
-    Pipeline().run(source / "a.txt", out, PipelineSettings())
+    with pytest.raises(ValueError, match="single-file run"):
+        Pipeline().run(source / "a.txt", out, PipelineSettings())
     assert (out / "documents" / "b.txt.md").is_file()
 
 

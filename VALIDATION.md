@@ -52,7 +52,12 @@ The following formats have been exercised end to end:
 | WAV | Speech synthesized locally with `espeak-ng` | **Superseded**: this held only in a CI job with extra native tooling. `brainforgemd[all]` alone cannot transcribe audio; `[asr]` is required. |
 | MP4 | Video generated locally with FFmpeg and synthetic speech audio | **Superseded**: same as WAV — the audio track needs the `[asr]` extra. |
 
-The rich-format test also performs an unchanged second run and verifies incremental byte stability for the manifest, chunks, nodes, and edges.
+The rich-format suite keeps document/OCR checks independent from media tooling, so a
+missing speech synthesizer cannot skip PDF, Office, EPUB, Parquet, and image assertions.
+It also performs an unchanged second document run and verifies incremental byte
+stability for the manifest, chunks, nodes, and edges. Media is checked separately: a
+working ASR backend must preserve synthesized speech, while `[all]` without `[asr]`
+must report the missing transcription backend explicitly.
 
 At validation time, `brainforgemd doctor` confirmed that Docling, MarkItDown, Outlook MSG support, Parquet support, FFmpeg, and OCR tooling were available in the rich test environment.
 

@@ -52,7 +52,13 @@ Les formats suivants ont été exercés de bout en bout :
 | WAV | Parole synthétisée localement avec `espeak-ng` | **Caduc** : valable uniquement dans un job CI doté d’outils natifs supplémentaires. `brainforgemd[all]` seul ne transcrit pas l’audio; l’extra `[asr]` est requis. |
 | MP4 | Vidéo générée avec FFmpeg et audio vocal synthétique | **Caduc** : identique au WAV — la piste audio exige l’extra `[asr]`. |
 
-Le test des formats riches effectue lui aussi un deuxième passage sans modification et vérifie la stabilité octet pour octet du manifest, des chunks, des nœuds et des arêtes.
+La suite des formats riches sépare les contrôles document/OCR des outils média :
+l’absence d’un synthétiseur vocal ne peut donc plus masquer les assertions PDF, Office,
+EPUB, Parquet et image. Elle effectue aussi un deuxième passage documentaire sans
+modification et vérifie la stabilité octet pour octet du manifest, des chunks, des nœuds
+et des arêtes. Le média est vérifié séparément : un backend ASR fonctionnel doit préserver
+la parole synthétisée, tandis que `[all]` sans `[asr]` doit signaler explicitement le
+backend de transcription manquant.
 
 Au moment de cette validation, `brainforgemd doctor` confirmait que Docling, MarkItDown, la prise en charge Outlook MSG, Parquet, FFmpeg et les outils OCR étaient disponibles dans l’environnement de test riche.
 

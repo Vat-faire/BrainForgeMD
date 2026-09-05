@@ -99,6 +99,7 @@ BrainForgeMD is built around a few explicit rules:
 - Common VCS/build/cache/environment directory exclusions.
 - Symlink skipping by default.
 - Single-writer locking of the output directory.
+- Transactional publication and rollback of corpus artifacts.
 - Extensible converter registry.
 - Optional Docling and MarkItDown rich-document/media backends.
 
@@ -159,6 +160,11 @@ Convert one file:
 ```bash
 brainforgemd convert report.pdf -o context-out
 ```
+
+A single-file run may create or refresh a corpus containing only that file (or that
+archive). To protect the global manifest, chunks, graph, and state from becoming a
+partial view, BrainForgeMD refuses to apply a single-file run to an existing corpus
+that contains other sources; rerun the containing source directory instead.
 
 Convert an entire folder recursively:
 

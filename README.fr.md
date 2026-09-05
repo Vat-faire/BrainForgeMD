@@ -99,6 +99,7 @@ BrainForgeMD repose sur quelques règles explicites :
 - Exclusion des dossiers courants de contrôle de version, build, cache et environnements.
 - Liens symboliques ignorés par défaut.
 - Verrouillage du répertoire de sortie : un seul écrivain à la fois.
+- Publication transactionnelle et restauration des artefacts du corpus en cas d’échec.
 - Registre de convertisseurs extensible.
 - Moteurs optionnels Docling et MarkItDown pour les documents et médias riches.
 
@@ -159,6 +160,11 @@ Convertir un fichier :
 ```bash
 brainforgemd convert report.pdf -o context-out
 ```
+
+Une exécution mono-fichier peut créer ou rafraîchir un corpus qui ne contient que ce
+fichier (ou cette archive). Pour empêcher le manifeste global, les chunks, le graphe et
+l’état de devenir une vue partielle, BrainForgeMD refuse une exécution mono-fichier vers
+un corpus existant contenant d’autres sources; relancez plutôt le dossier source parent.
 
 Convertir récursivement tout un dossier :
 

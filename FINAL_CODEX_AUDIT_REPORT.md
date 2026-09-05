@@ -198,15 +198,24 @@ artefacts peuvent être obsolètes ou forgés. La vitesse ne compense pas CX-10.
 
 ## 8. Tests, packaging et installation
 
-- 120 tests collectés après audit ; la suite riche est divisée en documents, image et
+- 120 tests collectés après audit. Résultat final Python 3.11 avec validation riche :
+  **117 passed, 3 skipped, 0 failed, couverture 88 %**. Résultat Python 3.12 sans le
+  flag du job riche : **115 passed, 5 skipped, 0 failed**. Ruff : propre.
+- La suite riche est divisée en documents, image et
   média afin qu'un outil média manquant ne masque plus les autres formats.
 - Les tests ajoutés couvrent cache/state, tampering, TOCTOU, collisions portables,
   atomicité/rollback, archives liées, entrées pathologiques, streaming et diagnostic.
 - Les 13 propriétés Hypothesis existantes et le corpus core multi-format ont été
   conservés ; aucun `xfail` n'a été ajouté.
+- Les trois skips Python 3.11 sont : média synthétique faute de `espeak`, et deux vieux
+  cas d'archives dépendants du filesystem, explicitement superseded dans `conftest.py`
+  par des régressions portables plus strictes. Les deux skips supplémentaires sous 3.12
+  sont les tests riches document/image, réservés au job riche ; aucun échec n'est masqué.
 - Wheel et sdist se construisent. Le wheel core s'installe dans un environnement vierge
   et fonctionne depuis un CWD neutre. Le wheel `[all]` s'installe avec tous ses extras,
-  `pip check` est propre et un PDF multi-page passe par l'installation propre.
+  `pip check` est propre et le marqueur de la troisième page d'un PDF multi-page survit
+  via l'installation propre. Le sdist final contient 93 entrées, dont les tests, les
+  scripts d'audit et ce rapport.
 - Les deux entry points `brainforgemd` et `bfmd`, `version`, `doctor`, `formats` et
   `convert` sont exercés. Les sources, docs utiles et tests nécessaires sont présents
   dans le sdist.

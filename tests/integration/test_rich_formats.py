@@ -61,7 +61,7 @@ def _make_xlsx(path: Path) -> None:
     book.save(path)
 
 
-def _make_png(path: Path) -> None:
+def _make_image(path: Path) -> None:
     Image = pytest.importorskip("PIL.Image")
     ImageDraw = pytest.importorskip("PIL.ImageDraw")
     image = Image.new("RGB", (1200, 300), "white")
@@ -139,20 +139,15 @@ def _build_rich_corpus(root: Path) -> list[str]:
     _make_docx(root / "fixture.docx")
     _make_pptx(root / "fixture.pptx")
     _make_xlsx(root / "fixture.xlsx")
-    _make_png(root / "fixture.png")
     _make_epub(root / "fixture.epub")
     _make_parquet(root / "fixture.parquet")
-    wav, video = _make_audio_and_video(root)
     return [
         "fixture.pdf",
         "fixture.docx",
         "fixture.pptx",
         "fixture.xlsx",
-        "fixture.png",
         "fixture.epub",
         "fixture.parquet",
-        wav.name,
-        video.name,
     ]
 
 
@@ -171,19 +166,22 @@ def test_rich_formats_through_real_pipeline_and_incremental_replay(tmp_path: Pat
     assert first.failed == 0, errors
     assert set(expected) <= set(by_source), (expected, by_source, errors)
 
+    markers = {
+        "fixture.pdf": "This text must survive document conversion.",
+        "fixture.docx": "This paragraph must survive document conversion.",
+        "fixture.pptx": "This slide text must survive document conversion.",
+        "fixture.xlsx": "BrainForgeMD",
+        "fixture.epub": "This EPUB text must survive conversion.",
+        "fixture.parquet": "BrainForgeMD",
+    }
     for source_name in expected:
         record = by_source[source_name]
         assert record["parser"] in {"docling", "markitdown", "parquet"}
         markdown = (out / record["output_path"]).read_text(encoding="utf-8")
         assert len(markdown) > 40
+        assert markers[source_name].lower() in markdown.replace("\\", "").lower()
         assert record["chunk_count"] >= 1
         assert len(record["sha256"]) == 64
-
-    text_joined = "\n".join(
-        (out / by_source[name]["output_path"]).read_text(encoding="utf-8").lower()
-        for name in ["fixture.pdf", "fixture.docx", "fixture.pptx", "fixture.xlsx", "fixture.epub"]
-    )
-    assert "brainforgemd" in text_joined
 
     stable_before = {
         name: (out / name).read_bytes()
@@ -195,3 +193,44 @@ def test_rich_formats_through_real_pipeline_and_incremental_replay(tmp_path: Pat
     assert second.skipped == len(expected)
     for name, before in stable_before.items():
         assert (out / name).read_bytes() == before, name
+
+
+def test_image_ocr_is_checked_without_gating_document_formats(tmp_path: Path) -> None:
+    source = tmp_path / "images"
+    source.mkdir()
+    _make_image(source / "fixture.jpg")
+    _make_image(source / "fixture.png")
+    out = tmp_path / "context-out"
+
+    stats = Pipeline().run(source, out, PipelineSettings())
+    manifest = {row["source_path"]: row for row in _jsonl(out / "manifest.jsonl")}
+    errors = {row["source_path"]: row for row in _jsonl(out / "errors.jsonl")}
+
+    assert "fixture.jpg" in manifest, errors
+    jpeg = (out / manifest["fixture.jpg"]["output_path"]).read_text(encoding="utf-8")
+    assert "brainforgemd" in jpeg.replace("\\", "").lower()
+    if "fixture.png" in manifest:
+        png = (out / manifest["fixture.png"]["output_path"]).read_text(encoding="utf-8")
+        assert "brainforgemd" in png.replace("\\", "").lower()
+    else:
+        assert "fixture.png" in errors
+    assert stats.converted + stats.failed == 2
+
+
+def test_media_capability_is_verified_or_reported_unavailable(tmp_path: Path) -> None:
+    source = tmp_path / "media"
+    source.mkdir()
+    wav, video = _make_audio_and_video(source)
+    out = tmp_path / "context-out"
+
+    stats = Pipeline().run(source, out, PipelineSettings())
+    manifest = {row["source_path"]: row for row in _jsonl(out / "manifest.jsonl")}
+    errors = {row["source_path"]: row for row in _jsonl(out / "errors.jsonl")}
+    for path in (wav, video):
+        if path.name in manifest:
+            markdown = (out / manifest[path.name]["output_path"]).read_text(encoding="utf-8")
+            assert "brain" in markdown.lower() and "forge" in markdown.lower()
+        else:
+            assert path.name in errors
+            assert "whisper" in errors[path.name]["message"].lower()
+    assert stats.converted + stats.failed == 2

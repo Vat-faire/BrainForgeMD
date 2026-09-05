@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import brainforgemd.pipeline as pipeline_module
+from brainforgemd import cli
 from brainforgemd.archive import ArchiveLimits, extract_archive
 from brainforgemd.converters.generic_text import GenericTextConverter
 from brainforgemd.pipeline import Pipeline, PipelineSettings
@@ -199,3 +200,18 @@ def test_jsonl_writer_streams_records_into_its_temporary_file(tmp_path: Path) ->
 
     jsonl_write(target, records())
     assert [row["index"] for row in _jsonl(target)] == [0, 1, 2]
+
+
+def test_doctor_and_formats_disclose_missing_asr(monkeypatch, capsys) -> None:
+    real_module = cli._module
+    monkeypatch.setattr(cli, "_module", lambda name: False if name == "whisper" else real_module(name))
+
+    assert cli.main(["doctor"]) == 0
+    doctor = capsys.readouterr().out
+    assert "ASR transcription" in doctor
+    assert "not found" in doctor
+    assert "documents/OCR/media" not in doctor
+
+    assert cli.main(["formats"]) == 0
+    formats = capsys.readouterr().out
+    assert "audio/video require the [asr] extra" in formats

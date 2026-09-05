@@ -187,7 +187,19 @@ def atomic_write_text(path: Path, text: str) -> None:
 
 
 def jsonl_write(path: Path, records: Iterable[dict[str, Any]]) -> None:
-    atomic_write_text(path, "".join(json_dumps(record) + "\n" for record in records))
+    """Atomically stream JSON Lines without duplicating the full corpus in memory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8", newline="\n") as sink:
+            for record in records:
+                sink.write(json_dumps(record))
+                sink.write("\n")
+        tmp.replace(path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
 
 
 def safe_relpath(path: Path, root: Path) -> str:

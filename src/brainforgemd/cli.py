@@ -79,6 +79,9 @@ def _cmd_formats() -> int:
     if any(not available for _, _, available in rows):
         print()
         print("! backend not installed on this machine; these extensions will be reported as failures")
+    if not _module("whisper"):
+        print()
+        print("! audio/video require the [asr] extra; the transcription backend is not installed")
     return 0
 
 
@@ -88,7 +91,8 @@ def _module(name: str) -> bool:
 
 def _cmd_doctor() -> int:
     checks = [
-        ("Docling rich documents/OCR/media", _module("docling")),
+        ("Docling rich documents/OCR", _module("docling")),
+        ("ASR transcription (audio/video)", _module("whisper")),
         ("MarkItDown fallback", _module("markitdown")),
         ("Outlook MSG", _module("extract_msg")),
         ("Parquet", _module("pyarrow")),

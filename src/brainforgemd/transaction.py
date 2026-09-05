@@ -18,8 +18,10 @@ class CorpusTransaction:
         self.staged = self.work / "staged"
         self.backup = self.work / "backup"
         self.staged.mkdir(parents=True)
+        self._preserve_recovery = False
 
     def _relative(self, target: Path) -> Path:
+        clean_transaction = True
         try:
             return target.absolute().relative_to(self.root)
         except ValueError as exc:
@@ -58,20 +60,33 @@ class CorpusTransaction:
                 if staged_path is not None:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     staged_path.replace(target)
-        except BaseException:
+        except BaseException as commit_error:
+            rollback_errors: list[str] = []
             for target, previous in reversed(moved):
                 with contextlib.suppress(OSError):
                     if os.path.lexists(target):
                         target.unlink()
                 if previous is not None and os.path.lexists(previous):
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    previous.replace(target)
+                    try:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        previous.replace(target)
+                    except OSError as exc:
+                        rollback_errors.append(f"{target}: {exc}")
+            if rollback_errors:
+                clean_transaction = False
+                self._preserve_recovery = True
+                raise RuntimeError(
+                    f"Corpus commit and rollback failed; recovery files are preserved in "
+                    f"{self.backup}: {'; '.join(rollback_errors)}"
+                ) from commit_error
             raise
         finally:
-            self.abort()
+            if clean_transaction:
+                self.abort()
 
     def abort(self) -> None:
-        shutil.rmtree(self.work, ignore_errors=True)
+        if not self._preserve_recovery:
+            shutil.rmtree(self.work, ignore_errors=True)
 
     def __del__(self) -> None:
         with contextlib.suppress(Exception):

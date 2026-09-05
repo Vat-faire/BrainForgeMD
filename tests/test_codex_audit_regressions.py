@@ -256,10 +256,17 @@ def test_transaction_rolls_back_if_replacement_fails_mid_commit(
     tracked = ("manifest.jsonl", "chunks.jsonl", "nodes.jsonl", "edges.jsonl")
     before = {name: (output / name).read_bytes() for name in tracked}
     real_replace = Path.replace
+    failed_once = False
 
     def fail_final_chunks_replace(self: Path, target: Path):
+        nonlocal failed_once
         target = Path(target)
-        if self.name == "chunks.jsonl" and target == output / "chunks.jsonl":
+        if (
+            not failed_once
+            and self.name == "chunks.jsonl"
+            and target == output / "chunks.jsonl"
+        ):
+            failed_once = True
             raise OSError("simulated replacement failure")
         return real_replace(self, target)
 

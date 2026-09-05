@@ -20,6 +20,8 @@ réexécutés après correction.
 | `main` local et distant au départ | `6f7d51d727380a695a07222b3c680a9aa7d99215` |
 | Branche d'audit | `audit/codex-final-validation` |
 | Dernier commit de code audité/corrigé | `a9207b5` |
+| SHA validé localement et par la première matrice PR complète | `948709f2dffaf599b1e6f35898e091094e4ea92e` |
+| Pull request | `https://github.com/Vat-faire/BrainForgeMD/pull/3` |
 | Fast-path séparé | `engineering/incremental-fastpath`, `2512cd9fa4dc3a2d8e6551d388eb953e739e70df` |
 
 Le `git status` initial était propre. `git fetch --all --prune` a été exécuté avant
@@ -158,9 +160,10 @@ pour le core et l'installation wheel propre. Les collisions portables sont test�
 normalisation déterministe, même lorsque le filesystem Windows ne permet pas de créer
 toutes les variantes simultanément.
 
-La preuve directe des correctifs Codex sur Linux/macOS/Python 3.13 dépend des checks de
-la pull request de cette branche ; elle est un gate de release, pas une inférence depuis
-le run vert de `main` antérieur aux correctifs.
+La preuve directe des correctifs Codex sur Linux/macOS/Python 3.13 a été obtenue sur la
+PR #3 : **29/29 checks verts** au SHA `948709f`, dont tests CI, core et wheel propre sur
+les neuf couples OS/Python, plus build et formats riches. Cette preuve ne repose donc pas
+sur le run vert de `main` antérieur aux correctifs.
 
 ## 7. Performance et mémoire
 
@@ -247,13 +250,14 @@ workflow est rouge.
 
 ### `audit/codex-final-validation`
 
-**`READY_WITH_KNOWN_LIMITATIONS`**, sous réserve des checks de PR sur les neuf couples
-OS/Python et du job riche. Les problèmes d'intégrité/reproductibilité démontrés sont
-corrigés avec régressions. Restent ouverts : performance incrémentale, mémoire globale,
-absence de sandbox des parseurs riches, PNG/TIFF, DOC/PPT legacy et média sans `[asr]`.
+**`READY_WITH_KNOWN_LIMITATIONS`**. Le gate demandé est satisfait : les 29 checks de PR,
+dont les neuf couples OS/Python et le job riche, sont verts. Les problèmes
+d'intégrité/reproductibilité démontrés sont corrigés avec régressions. Restent ouverts :
+performance incrémentale, mémoire globale, absence de sandbox des parseurs riches,
+PNG/TIFF, DOC/PPT legacy et média sans `[asr]`.
 
 Ce verdict n'est pas `READY_FOR_V0.1.0` sans qualificatif : ces limites doivent rester
-publiques et les checks de la PR doivent être verts avant toute release.
+publiques lors de toute release.
 
 ## 11. Reproduction
 

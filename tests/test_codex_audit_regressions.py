@@ -6,6 +6,8 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
+import pytest
+
 import brainforgemd.pipeline as pipeline_module
 from brainforgemd.archive import ArchiveLimits, extract_archive
 from brainforgemd.pipeline import Pipeline, PipelineSettings
@@ -123,3 +125,58 @@ def test_archive_trailing_dot_collision_is_rejected_portably(tmp_path: Path) -> 
         assert "same portable file identity" in str(exc)
     else:
         raise AssertionError("Windows-equivalent archive members were both accepted")
+
+
+def test_single_file_run_cannot_corrupt_a_multi_source_corpus(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "a.txt").write_text("SOURCE_A", encoding="utf-8")
+    (source / "b.txt").write_text("SOURCE_B", encoding="utf-8")
+    output = tmp_path / "output"
+    Pipeline().run(source, output, PipelineSettings())
+    artifacts = {
+        name: (output / name).read_bytes()
+        for name in ("manifest.jsonl", "chunks.jsonl", "nodes.jsonl", "edges.jsonl")
+    }
+
+    (source / "a.txt").write_text("SOURCE_A_CHANGED", encoding="utf-8")
+    with pytest.raises(ValueError, match="single-file run"):
+        Pipeline().run(source / "a.txt", output, PipelineSettings())
+
+    for name, before in artifacts.items():
+        assert (output / name).read_bytes() == before
+
+
+def test_global_artifacts_roll_back_as_one_generation(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    document = source / "a.txt"
+    document.write_text("ORIGINAL_GENERATION", encoding="utf-8")
+    output = tmp_path / "output"
+    Pipeline().run(source, output, PipelineSettings())
+    tracked = (
+        "manifest.jsonl",
+        "chunks.jsonl",
+        "nodes.jsonl",
+        "edges.jsonl",
+        "INDEX.md",
+        ".brainforgemd/state.json",
+    )
+    before = {name: (output / name).read_bytes() for name in tracked}
+    original_jsonl_write = pipeline_module.jsonl_write
+
+    def fail_while_staging_chunks(path: Path, records) -> None:
+        if path.name == "chunks.jsonl":
+            raise OSError("simulated full disk")
+        original_jsonl_write(path, records)
+
+    document.write_text("REPLACEMENT_GENERATION", encoding="utf-8")
+    monkeypatch.setattr(pipeline_module, "jsonl_write", fail_while_staging_chunks)
+    with pytest.raises(OSError, match="simulated full disk"):
+        Pipeline().run(source, output, PipelineSettings())
+
+    for name, original in before.items():
+        assert (output / name).read_bytes() == original
+    published = next((output / "documents").rglob("*.md")).read_text(encoding="utf-8")
+    assert "ORIGINAL_GENERATION" in published
+    assert "REPLACEMENT_GENERATION" not in published

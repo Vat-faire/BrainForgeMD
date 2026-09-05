@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import json
 import tempfile
+import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -17,15 +18,22 @@ from .graph import build_graph
 from .lock import CorpusLock
 from .models import Chunk, ErrorRecord, PipelineStats, SourceInfo
 from .registry import ConverterRegistry, build_default_registry
-from .state import load_state, save_state
+from .state import STATE_VERSION, load_state, save_state
 from .utils import (
     atomic_write_text,
     guess_mime,
     jsonl_write,
+    portable_path_key,
     safe_output_path,
     sha256_file,
+    sha256_text,
     stable_id,
 )
+
+# Conversion semantics can change while developing an unreleased package whose public
+# version remains 0.1.0. Including an explicit revision prevents older derived Markdown
+# from being silently reused after parser/security changes.
+PIPELINE_CACHE_REVISION = 2
 
 
 @dataclass(slots=True)
@@ -43,7 +51,8 @@ class PipelineSettings:
 
     def config_hash(self) -> str:
         payload = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256((__version__ + "\x1f" + payload).encode("utf-8")).hexdigest()
+        identity = f"{__version__}\x1f{PIPELINE_CACHE_REVISION}\x1f{payload}"
+        return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
 class Pipeline:
@@ -100,7 +109,13 @@ class Pipeline:
             except ValueError:
                 pass
             files.append(path)
-        files.sort(key=lambda p: p.relative_to(input_path).as_posix().lower())
+        files.sort(
+            key=lambda p: (
+                portable_path_key(p.relative_to(input_path).as_posix()),
+                unicodedata.normalize("NFC", p.relative_to(input_path).as_posix()),
+                p.relative_to(input_path).as_posix(),
+            )
+        )
         return input_path, files
 
     @staticmethod
@@ -131,13 +146,19 @@ class Pipeline:
         """
         logical = relative_path.replace("!", "__archive__")
         candidate = safe_output_path(output_root, logical)
-        key = candidate.relative_to(output_root).as_posix()
+        key = portable_path_key(candidate.relative_to(output_root).as_posix())
         owner = claimed.get(key)
         if owner is None or owner == relative_path:
             claimed[key] = relative_path
             return candidate
         candidate = safe_output_path(output_root, logical, disambiguate=True)
-        key = candidate.relative_to(output_root).as_posix()
+        key = portable_path_key(candidate.relative_to(output_root).as_posix())
+        owner = claimed.get(key)
+        if owner is not None and owner != relative_path:
+            raise ValueError(
+                f"Output paths for {owner!r} and {relative_path!r} cannot be "
+                "disambiguated portably"
+            )
         claimed[key] = relative_path
         return candidate
 
@@ -195,7 +216,11 @@ class Pipeline:
         documents: list[dict[str, Any]] = []
         all_chunks: list[Chunk] = []
         old_state = load_state(output_root)
-        new_state: dict[str, Any] = {"version": 1, "config_hash": settings.config_hash(), "files": {}}
+        new_state: dict[str, Any] = {
+            "version": STATE_VERSION,
+            "config_hash": settings.config_hash(),
+            "files": {},
+        }
         previous_files = old_state.get("files", {}) if settings.incremental else {}
         config_hash = settings.config_hash()
         max_bytes = settings.max_file_mb * 1024 * 1024
@@ -238,7 +263,10 @@ class Pipeline:
                     try:
                         extracted = extract_archive(path, Path(tempdir.name), archive_limits, archive_budget)
                         prefix = logical_relative + "!"
-                        for child in sorted(extracted, key=lambda p: p.as_posix().lower()):
+                        for child in sorted(
+                            extracted,
+                            key=lambda p: (portable_path_key(p.as_posix()), p.as_posix()),
+                        ):
                             child_rel = child.relative_to(Path(tempdir.name)).as_posix()
                             queue.append((child, f"{prefix}/{child_rel}", depth + 1))
                     except Exception as exc:
@@ -259,12 +287,18 @@ class Pipeline:
                     continue
 
                 previous = previous_files.get(source.relative_path, {})
+                if not isinstance(previous, dict):
+                    previous = {}
+                cached_output_sha256 = ""
+                if output_path.is_file() and isinstance(previous.get("output_sha256"), str):
+                    with contextlib.suppress(OSError):
+                        cached_output_sha256 = sha256_file(output_path)
                 if (
                     settings.incremental
                     and previous.get("sha256") == source.sha256
                     and previous.get("config_hash") == config_hash
                     and previous.get("output_path") == output_path.relative_to(output_root).as_posix()
-                    and output_path.exists()
+                    and cached_output_sha256 == previous.get("output_sha256")
                 ):
                     # Re-read existing Markdown so indexes/graph/chunks can still be rebuilt consistently.
                     try:
@@ -315,6 +349,36 @@ class Pipeline:
                         if settings.strict:
                             raise RuntimeError(errors[-1].message)
                         continue
+                    try:
+                        digest_after = sha256_file(path)
+                    except OSError as exc:
+                        stats.failed += 1
+                        errors.append(
+                            ErrorRecord(
+                                source.relative_path,
+                                "convert",
+                                "SourceChangedDuringRead",
+                                f"Source could not be verified after conversion: {exc}",
+                                source.sha256,
+                            )
+                        )
+                        if settings.strict:
+                            raise
+                        continue
+                    if digest_after != source.sha256:
+                        stats.failed += 1
+                        errors.append(
+                            ErrorRecord(
+                                source.relative_path,
+                                "convert",
+                                "SourceChangedDuringRead",
+                                "Source content changed between provenance hashing and conversion",
+                                source.sha256,
+                            )
+                        )
+                        if settings.strict:
+                            raise RuntimeError(errors[-1].message)
+                        continue
                     title = result.title or path.stem
                     parser = result.parser
                     fields = {
@@ -348,6 +412,7 @@ class Pipeline:
                             raise
                         continue
                     stats.converted += 1
+                    cached_output_sha256 = sha256_text(full_md)
 
                 chunks = chunk_markdown(body, source.source_id, source.relative_path, chunk_settings)
                 stats.chunks += len(chunks)
@@ -372,6 +437,7 @@ class Pipeline:
                     "source_id": source.source_id,
                     "title": title,
                     "parser": parser,
+                    "output_sha256": cached_output_sha256,
                 }
         finally:
             for tempdir in archive_tempdirs:

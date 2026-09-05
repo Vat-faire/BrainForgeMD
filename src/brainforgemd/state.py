@@ -5,7 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-STATE_VERSION = 1
+STATE_VERSION = 2
+MAX_STATE_BYTES = 256 * 1024 * 1024
 
 
 def load_state(output_root: Path) -> dict[str, Any]:
@@ -13,10 +14,16 @@ def load_state(output_root: Path) -> dict[str, Any]:
     if not path.exists():
         return {"version": STATE_VERSION, "files": {}}
     try:
+        if path.stat().st_size > MAX_STATE_BYTES:
+            return {"version": STATE_VERSION, "files": {}}
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError, AttributeError):
         return {"version": STATE_VERSION, "files": {}}
-    if payload.get("version") != STATE_VERSION or not isinstance(payload.get("files"), dict):
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != STATE_VERSION
+        or not isinstance(payload.get("files"), dict)
+    ):
         return {"version": STATE_VERSION, "files": {}}
     return payload
 

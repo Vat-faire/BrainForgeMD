@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import re
+import unicodedata
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -147,6 +148,22 @@ def clean_text(text: str) -> str:
 
 def json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def portable_path_key(path: Path | str) -> str:
+    """Return a conservative identity shared by supported filesystems.
+
+    Default Windows and macOS filesystems do not distinguish case or Unicode
+    normalization forms. Windows additionally ignores trailing spaces and dots in
+    each path component. Treating those spellings as different on Linux can create a
+    corpus that overwrites or misattributes documents when copied to another host.
+    """
+    normalized = str(path).replace("\\", "/")
+    parts = [
+        unicodedata.normalize("NFC", part).casefold().rstrip(" .")
+        for part in normalized.split("/")
+    ]
+    return "/".join(parts)
 
 
 def atomic_write_text(path: Path, text: str) -> None:

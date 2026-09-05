@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import tarfile
 import unicodedata
 import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -215,3 +217,58 @@ def test_doctor_and_formats_disclose_missing_asr(monkeypatch, capsys) -> None:
     assert cli.main(["formats"]) == 0
     formats = capsys.readouterr().out
     assert "audio/video require the [asr] extra" in formats
+
+
+def test_tar_symlink_and_hardlink_members_are_never_materialized(tmp_path: Path) -> None:
+    archive_path = tmp_path / "links.tar"
+    payload = b"SAFE_ARCHIVE_MARKER"
+    with tarfile.open(archive_path, "w") as archive:
+        regular = tarfile.TarInfo("safe.txt")
+        regular.size = len(payload)
+        archive.addfile(regular, BytesIO(payload))
+        symlink = tarfile.TarInfo("symlink.txt")
+        symlink.type = tarfile.SYMTYPE
+        symlink.linkname = "../../outside.txt"
+        archive.addfile(symlink)
+        hardlink = tarfile.TarInfo("hardlink.txt")
+        hardlink.type = tarfile.LNKTYPE
+        hardlink.linkname = "../../outside.txt"
+        archive.addfile(hardlink)
+
+    destination = tmp_path / "extract"
+    extracted = extract_archive(archive_path, destination, ArchiveLimits())
+
+    assert [path.relative_to(destination).as_posix() for path in extracted] == ["safe.txt"]
+    assert not (destination / "symlink.txt").exists()
+    assert not (destination / "hardlink.txt").exists()
+    assert not (tmp_path / "outside.txt").exists()
+
+
+def test_transaction_rolls_back_if_replacement_fails_mid_commit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    document = source / "a.txt"
+    document.write_text("ORIGINAL_TRANSACTION", encoding="utf-8")
+    output = tmp_path / "output"
+    Pipeline().run(source, output, PipelineSettings())
+    tracked = ("manifest.jsonl", "chunks.jsonl", "nodes.jsonl", "edges.jsonl")
+    before = {name: (output / name).read_bytes() for name in tracked}
+    real_replace = Path.replace
+
+    def fail_final_chunks_replace(self: Path, target: Path):
+        target = Path(target)
+        if self.name == "chunks.jsonl" and target == output / "chunks.jsonl":
+            raise OSError("simulated replacement failure")
+        return real_replace(self, target)
+
+    document.write_text("REPLACEMENT_TRANSACTION", encoding="utf-8")
+    monkeypatch.setattr(Path, "replace", fail_final_chunks_replace)
+    with pytest.raises(OSError, match="simulated replacement failure"):
+        Pipeline().run(source, output, PipelineSettings())
+
+    for name, original in before.items():
+        assert (output / name).read_bytes() == original
+    published = next((output / "documents").rglob("*.md")).read_text(encoding="utf-8")
+    assert "ORIGINAL_TRANSACTION" in published

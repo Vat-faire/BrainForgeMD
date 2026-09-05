@@ -21,7 +21,6 @@ class CorpusTransaction:
         self._preserve_recovery = False
 
     def _relative(self, target: Path) -> Path:
-        clean_transaction = True
         try:
             return target.absolute().relative_to(self.root)
         except ValueError as exc:
@@ -46,6 +45,7 @@ class CorpusTransaction:
         }
         affected = sorted(set(staged) | delete_relatives, key=lambda path: path.as_posix())
         moved: list[tuple[Path, Path | None]] = []
+        clean_transaction = True
         try:
             for relative in affected:
                 target = self.root / relative

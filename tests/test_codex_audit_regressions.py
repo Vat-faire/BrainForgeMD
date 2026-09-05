@@ -12,7 +12,7 @@ import brainforgemd.pipeline as pipeline_module
 from brainforgemd.archive import ArchiveLimits, extract_archive
 from brainforgemd.converters.generic_text import GenericTextConverter
 from brainforgemd.pipeline import Pipeline, PipelineSettings
-from brainforgemd.utils import sha256_file
+from brainforgemd.utils import jsonl_write, sha256_file
 
 
 def _jsonl(path: Path) -> list[dict]:
@@ -187,3 +187,15 @@ def test_text_fallback_detects_binary_payload_after_the_first_64k(tmp_path: Path
     path = tmp_path / "deceptive.unknown"
     path.write_bytes(b"apparently ordinary prose\n" * 3000 + b"\x00\x01\x02" * 30_000)
     assert not GenericTextConverter().accepts(path)
+
+
+def test_jsonl_writer_streams_records_into_its_temporary_file(tmp_path: Path) -> None:
+    target = tmp_path / "large.jsonl"
+
+    def records():
+        for index in range(3):
+            assert list(tmp_path.glob("large.jsonl.*.tmp"))
+            yield {"index": index, "payload": "x" * 1000}
+
+    jsonl_write(target, records())
+    assert [row["index"] for row in _jsonl(target)] == [0, 1, 2]

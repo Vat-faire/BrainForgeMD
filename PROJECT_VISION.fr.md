@@ -67,9 +67,9 @@ Voir [PRIVACY.fr.md](PRIVACY.fr.md).
 
 ## Modèle de développement
 
-Le projet est dirigé et maintenu par **Vat-faire** et son développement a été assisté par IA.
+Le projet est dirigé et maintenu par **Sébastien Dubé** et son développement a été assisté par IA.
 
-L’idée, les priorités, les approbations, le périmètre et les décisions finales sont attribués à Vat-faire. OpenAI ChatGPT a été utilisé comme outil de développement pour l’architecture, l’implémentation, les tests, le débogage, les revues, la documentation et le travail dans le dépôt.
+L’idée, les priorités, les approbations, le périmètre et les décisions finales sont attribués à Sébastien Dubé. OpenAI ChatGPT a été utilisé comme outil de développement pour l’architecture, l’implémentation, les tests, le débogage, les revues, la documentation et le travail dans le dépôt.
 
 La méthode de développement ne remplace pas la vérification. Le projet devrait être jugé sur son code, ses tests, ses résultats CI, ses limites documentées et son comportement.
 

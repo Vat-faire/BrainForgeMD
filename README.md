@@ -14,14 +14,14 @@
 
 ## Author and maintenance
 
-BrainForgeMD is an original project by **Vat-faire**.
+BrainForgeMD is an original project by **Sébastien Dubé**.
 
-- Author and maintainer: **Vat-faire** — https://github.com/Vat-faire
-- License: [MIT](LICENSE) — © 2026 Vat-faire
-- Product direction, priorities, approvals, and final decisions: **Vat-faire**
+- Author and maintainer: **Sébastien Dubé** — https://github.com/Sd-tech-Sol
+- License: [MIT](LICENSE) — © 2026 Sébastien Dubé
+- Product direction, priorities, approvals, and final decisions: **Sébastien Dubé**
 - Development: **AI-assisted** — see [AI_ASSISTANCE.md](AI_ASSISTANCE.md)
 
-The project does not claim that every line was typed by hand. OpenAI ChatGPT was used as a development tool for architecture, implementation, testing, review, documentation, and repository work under Vat-faire's direction. No AI system is the owner or maintainer of BrainForgeMD, and use of an AI tool implies no affiliation with or endorsement by OpenAI.
+The project does not claim that every line was typed by hand. OpenAI ChatGPT was used as a development tool for architecture, implementation, testing, review, documentation, and repository work under Sébastien Dubé's direction. No AI system is the owner or maintainer of BrainForgeMD, and use of an AI tool implies no affiliation with or endorsement by OpenAI.
 
 ## Why BrainForgeMD exists
 
@@ -110,13 +110,13 @@ BrainForgeMD is built around a few explicit rules:
 The core has no mandatory third-party runtime dependency.
 
 ```bash
-pip install "brainforgemd @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 ### Full optional document/media stack
 
 ```bash
-pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd[all] @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 `[all]` covers PDF, Office, OpenDocument, EPUB, images/OCR, Outlook `.msg` and Parquet.
@@ -125,7 +125,7 @@ pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.g
 several gigabytes, so it is a separate extra:
 
 ```bash
-pip install "brainforgemd[all,asr] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd[all,asr] @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 Without it every `.wav`, `.mp3`, `.mp4` and similar file is reported as a failure rather
@@ -134,7 +134,7 @@ than converted.
 ### Development setup
 
 ```bash
-git clone https://github.com/Vat-faire/BrainForgeMD.git
+git clone https://github.com/Sd-tech-Sol/BrainForgeMD.git
 cd BrainForgeMD
 python -m venv .venv
 # Windows: .venv\Scripts\activate
@@ -310,11 +310,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## AI-assisted development
 
-BrainForgeMD is an original project by **Vat-faire**. The idea, product direction, requirements, priorities, approvals, and final decisions are attributed to Vat-faire.
+BrainForgeMD is an original project by **Sébastien Dubé**. The idea, product direction, requirements, priorities, approvals, and final decisions are attributed to Sébastien Dubé.
 
-Development has been **AI-assisted**. OpenAI ChatGPT has been used for architecture, implementation, tests, audits, documentation, and GitHub repository work under Vat-faire's direction.
+Development has been **AI-assisted**. OpenAI ChatGPT has been used for architecture, implementation, tests, audits, documentation, and GitHub repository work under Sébastien Dubé's direction.
 
-This is not a claim that every line was manually typed. It is also not a claim that an AI system owns or maintains the project. Final project responsibility and maintenance rest with **Vat-faire**.
+This is not a claim that every line was manually typed. It is also not a claim that an AI system owns or maintains the project. Final project responsibility and maintenance rest with **Sébastien Dubé**.
 
 See [AI_ASSISTANCE.md](AI_ASSISTANCE.md) for the full disclosure.
 
@@ -322,4 +322,4 @@ See [AI_ASSISTANCE.md](AI_ASSISTANCE.md) for the full disclosure.
 
 MIT. See [LICENSE](LICENSE).
 
-Copyright (c) 2026 **Vat-faire**.
+Copyright (c) 2026 **Sébastien Dubé**.

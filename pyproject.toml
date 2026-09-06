@@ -9,7 +9,7 @@ description = "Convert heterogeneous files into provenance-preserving Markdown c
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
-authors = [{name = "Vat-faire"}]
+authors = [{name = "Sébastien Dubé"}]
 keywords = ["markdown", "rag", "graphrag", "ingestion", "documents", "ocr", "transcription", "knowledge-base"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -57,9 +57,9 @@ brainforgemd = "brainforgemd.cli:main"
 bfmd = "brainforgemd.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Vat-faire/BrainForgeMD"
-Repository = "https://github.com/Vat-faire/BrainForgeMD"
-Issues = "https://github.com/Vat-faire/BrainForgeMD/issues"
+Homepage = "https://github.com/Sd-tech-Sol/BrainForgeMD"
+Repository = "https://github.com/Sd-tech-Sol/BrainForgeMD"
+Issues = "https://github.com/Sd-tech-Sol/BrainForgeMD/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

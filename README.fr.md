@@ -14,14 +14,14 @@
 
 ## Auteur et maintenance
 
-BrainForgeMD est un projet original de **Vat-faire**.
+BrainForgeMD est un projet original de **Sd-tech-Sol**.
 
-- Auteur et mainteneur : **Vat-faire** — https://github.com/Vat-faire
-- Licence : [MIT](LICENSE) — © 2026 Vat-faire
-- Direction du produit, priorités, approbations et décisions finales : **Vat-faire**
+- Auteur et mainteneur : **Sd-tech-Sol** — https://github.com/Sd-tech-Sol
+- Licence : [MIT](LICENSE) — © 2026 Sd-tech-Sol
+- Direction du produit, priorités, approbations et décisions finales : **Sd-tech-Sol**
 - Développement : **assisté par IA** — voir [AI_ASSISTANCE.md](AI_ASSISTANCE.md)
 
-Le projet ne prétend pas que chaque ligne a été tapée à la main. OpenAI ChatGPT a été utilisé comme outil de développement pour l’architecture, l’implémentation, les tests, les revues, la documentation et le travail dans le dépôt GitHub, sous la direction de Vat-faire. Aucun système d’IA n’est propriétaire ou mainteneur de BrainForgeMD, et son utilisation n’implique aucune affiliation avec OpenAI ni approbation de sa part.
+Le projet ne prétend pas que chaque ligne a été tapée à la main. OpenAI ChatGPT a été utilisé comme outil de développement pour l’architecture, l’implémentation, les tests, les revues, la documentation et le travail dans le dépôt GitHub, sous la direction de Sd-tech-Sol. Aucun système d’IA n’est propriétaire ou mainteneur de BrainForgeMD, et son utilisation n’implique aucune affiliation avec OpenAI ni approbation de sa part.
 
 ## Pourquoi BrainForgeMD existe
 
@@ -110,13 +110,13 @@ BrainForgeMD repose sur quelques règles explicites :
 Le noyau n’a aucune dépendance tierce obligatoire à l’exécution.
 
 ```bash
-pip install "brainforgemd @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 ### Pile optionnelle complète documents/médias
 
 ```bash
-pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd[all] @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 `[all]` couvre PDF, Office, OpenDocument, EPUB, images/OCR, Outlook `.msg` et Parquet.
@@ -125,7 +125,7 @@ pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.g
 de reconnaissance vocale de plusieurs gigaoctets, fourni par un extra distinct :
 
 ```bash
-pip install "brainforgemd[all,asr] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd[all,asr] @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 Sans cet extra, chaque fichier `.wav`, `.mp3`, `.mp4` et assimilé est signalé en échec
@@ -134,7 +134,7 @@ plutôt que converti.
 ### Environnement de développement
 
 ```bash
-git clone https://github.com/Vat-faire/BrainForgeMD.git
+git clone https://github.com/Sd-tech-Sol/BrainForgeMD.git
 cd BrainForgeMD
 python -m venv .venv
 # Windows: .venv\Scripts\activate
@@ -310,11 +310,11 @@ Voir [CONTRIBUTING.fr.md](CONTRIBUTING.fr.md).
 
 ## Développement assisté par IA
 
-BrainForgeMD est un projet original de **Vat-faire**. L’idée, la direction du produit, les exigences, les priorités, les approbations et les décisions finales sont attribuées à Vat-faire.
+BrainForgeMD est un projet original de **Sd-tech-Sol**. L’idée, la direction du produit, les exigences, les priorités, les approbations et les décisions finales sont attribuées à Sd-tech-Sol.
 
-Le développement a été **assisté par IA**. OpenAI ChatGPT a servi pour l’architecture, l’implémentation, les tests, les audits, la documentation et le travail dans le dépôt GitHub, sous la direction de Vat-faire.
+Le développement a été **assisté par IA**. OpenAI ChatGPT a servi pour l’architecture, l’implémentation, les tests, les audits, la documentation et le travail dans le dépôt GitHub, sous la direction de Sd-tech-Sol.
 
-Cela ne signifie pas que chaque ligne a été tapée manuellement. Cela ne signifie pas non plus qu’un système d’IA possède ou maintient le projet. La responsabilité finale du projet et sa maintenance reviennent à **Vat-faire**.
+Cela ne signifie pas que chaque ligne a été tapée manuellement. Cela ne signifie pas non plus qu’un système d’IA possède ou maintient le projet. La responsabilité finale du projet et sa maintenance reviennent à **Sd-tech-Sol**.
 
 Voir [AI_ASSISTANCE.md](AI_ASSISTANCE.md) pour la déclaration complète.
 
@@ -322,4 +322,4 @@ Voir [AI_ASSISTANCE.md](AI_ASSISTANCE.md) pour la déclaration complète.
 
 MIT. Voir [LICENSE](LICENSE).
 
-Copyright (c) 2026 **Vat-faire**.
+Copyright (c) 2026 **Sd-tech-Sol**.

@@ -71,4 +71,4 @@ See [../SECURITY.md](../SECURITY.md).
 
 ## Development transparency
 
-The architecture and implementation were developed with AI assistance under Vat-faire's direction. The relevant disclosure is in [../AI_ASSISTANCE.md](../AI_ASSISTANCE.md). The technical claims in this document are intended to be verifiable from the code and tests rather than from the development method.
+The architecture and implementation were developed with AI assistance under Sd-tech-Sol's direction. The relevant disclosure is in [../AI_ASSISTANCE.md](../AI_ASSISTANCE.md). The technical claims in this document are intended to be verifiable from the code and tests rather than from the development method.

@@ -4,9 +4,9 @@
 
 ## English
 
-BrainForgeMD is an original project directed and maintained by **Vat-faire**.
+BrainForgeMD is an original project directed and maintained by **Sd-tech-Sol**.
 
-The project idea, intended use, product direction, priorities, approvals, and final decisions are attributed to Vat-faire. The development itself has been **AI-assisted**, and this document states that openly.
+The project idea, intended use, product direction, priorities, approvals, and final decisions are attributed to Sd-tech-Sol. The development itself has been **AI-assisted**, and this document states that openly.
 
 ### Tools used
 
@@ -18,7 +18,7 @@ This means BrainForgeMD does **not** claim that every line was manually typed by
 
 It also means the reverse: no AI system is the owner, maintainer, or decision-maker for the project. The use of OpenAI ChatGPT does not imply affiliation with, sponsorship by, or endorsement from OpenAI.
 
-**Final project responsibility and maintenance rest with Vat-faire.**
+**Final project responsibility and maintenance rest with Sd-tech-Sol.**
 
 ### How the work is judged
 
@@ -43,9 +43,9 @@ Public transparency is provided through the resulting code, tests, documentation
 
 ## Français
 
-BrainForgeMD est un projet original dirigé et maintenu par **Vat-faire**.
+BrainForgeMD est un projet original dirigé et maintenu par **Sd-tech-Sol**.
 
-L’idée du projet, son usage visé, sa direction, ses priorités, les approbations et les décisions finales sont attribuées à Vat-faire. Le développement lui-même a été **assisté par IA**, et ce document le dit ouvertement.
+L’idée du projet, son usage visé, sa direction, ses priorités, les approbations et les décisions finales sont attribuées à Sd-tech-Sol. Le développement lui-même a été **assisté par IA**, et ce document le dit ouvertement.
 
 ### Outils utilisés
 
@@ -57,7 +57,7 @@ Cela signifie que BrainForgeMD ne prétend **pas** que chaque ligne a été tap�
 
 Cela signifie aussi l’inverse : aucun système d’IA n’est propriétaire, mainteneur ou décideur du projet. L’utilisation d’OpenAI ChatGPT n’implique aucune affiliation avec OpenAI, aucun commanditaire et aucune approbation de leur part.
 
-**La responsabilité finale du projet et sa maintenance reviennent à Vat-faire.**
+**La responsabilité finale du projet et sa maintenance reviennent à Sd-tech-Sol.**
 
 ### Comment le travail peut être évalué
 

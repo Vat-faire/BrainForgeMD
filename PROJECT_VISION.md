@@ -67,9 +67,9 @@ See [PRIVACY.md](PRIVACY.md).
 
 ## Development model
 
-The project is directed and maintained by **Vat-faire** and has been developed with AI assistance.
+The project is directed and maintained by **Sd-tech-Sol** and has been developed with AI assistance.
 
-The idea, priorities, approvals, scope, and final decisions are attributed to Vat-faire. OpenAI ChatGPT has been used as a development tool for architecture, implementation, testing, debugging, review, documentation, and repository work.
+The idea, priorities, approvals, scope, and final decisions are attributed to Sd-tech-Sol. OpenAI ChatGPT has been used as a development tool for architecture, implementation, testing, debugging, review, documentation, and repository work.
 
 The development method does not replace verification. The project should be judged through its code, tests, CI results, documented limits, and behavior.
 

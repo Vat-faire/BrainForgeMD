@@ -27,7 +27,7 @@ Le noyau vise à rester petit et prévisible. Il traite directement les formats 
 Installer l’extra Docling :
 
 ```bash
-pip install "brainforgemd[docling] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd[docling] @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 Selon la version de Docling installée et l’environnement, cela peut étendre le support vers les PDF, Word, PowerPoint, Excel, OpenDocument, images/OCR, HTML/Markdown, certains dialectes XML, VTT, LaTeX, courriel, EPUB et les autres formats pris en charge par cette version de Docling.
@@ -45,7 +45,7 @@ Deux capacités annoncées par Docling exigent des extras que `[docling]` seul n
 Installer MarkItDown comme solution de repli supplémentaire :
 
 ```bash
-pip install "brainforgemd[markitdown] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd[markitdown] @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 Ses capacités dépendent de la version installée et de ses dépendances optionnelles. Il peut fournir des parcours supplémentaires pour des documents Office courants, PDF, images/OCR, audio, HTML, texte structuré, ZIP, EPUB et formats similaires.
@@ -53,7 +53,7 @@ Ses capacités dépendent de la version installée et de ses dépendances option
 ## Pile optionnelle complète
 
 ```bash
-pip install "brainforgemd[all] @ git+https://github.com/Vat-faire/BrainForgeMD.git"
+pip install "brainforgemd[all] @ git+https://github.com/Sd-tech-Sol/BrainForgeMD.git"
 ```
 
 Comme les capacités des moteurs optionnels évoluent indépendamment de BrainForgeMD, le projet ne prétend pas que toutes leurs versions supportent exactement les mêmes formats.

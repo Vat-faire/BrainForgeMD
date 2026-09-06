@@ -14,14 +14,14 @@ réexécutés après correction.
 | Élément | Valeur vérifiée |
 |---|---|
 | Date | 2026-09-04 |
-| Dépôt | `Vat-faire/BrainForgeMD` |
+| Dépôt | `Sd-tech-Sol/BrainForgeMD` |
 | OS local | Windows 11, x86-64 |
 | Python locaux | CPython 3.11.9 et 3.12 |
 | `main` local et distant au départ | `6f7d51d727380a695a07222b3c680a9aa7d99215` |
 | Branche d'audit | `audit/codex-final-validation` |
 | Dernier commit de code audité/corrigé | `a9207b5` |
 | SHA validé localement et par la première matrice PR complète | `948709f2dffaf599b1e6f35898e091094e4ea92e` |
-| Pull request | `https://github.com/Vat-faire/BrainForgeMD/pull/3` |
+| Pull request | `https://github.com/Sd-tech-Sol/BrainForgeMD/pull/3` |
 | Fast-path séparé | `engineering/incremental-fastpath`, `2512cd9fa4dc3a2d8e6551d388eb953e739e70df` |
 
 Le `git status` initial était propre. `git fetch --all --prune` a été exécuté avant

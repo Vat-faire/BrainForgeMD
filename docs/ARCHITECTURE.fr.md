@@ -71,4 +71,4 @@ Voir [../SECURITY.fr.md](../SECURITY.fr.md).
 
 ## Transparence du développement
 
-L’architecture et l’implémentation ont été développées avec assistance IA sous la direction de Vat-faire. La déclaration correspondante se trouve dans [../AI_ASSISTANCE.md](../AI_ASSISTANCE.md). Les affirmations techniques de ce document sont destinées à être vérifiables dans le code et les tests, indépendamment de la méthode de développement utilisée.
+L’architecture et l’implémentation ont été développées avec assistance IA sous la direction de Sd-tech-Sol. La déclaration correspondante se trouve dans [../AI_ASSISTANCE.md](../AI_ASSISTANCE.md). Les affirmations techniques de ce document sont destinées à être vérifiables dans le code et les tests, indépendamment de la méthode de développement utilisée.
